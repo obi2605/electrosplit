@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -61,4 +62,25 @@ dependencies {
     implementation(libs.converter.gson)
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.android) // For coroutine support
+    // Add these new dependencies for CameraX and ML Kit
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.text.recognition)
+
+    // Image processing libraries
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.androidx.palette)
+
+    // Glide with KSP
+    implementation(libs.glide)
+    ksp(libs.glide.ksp)
+    implementation(libs.glide.compose)
+    implementation(libs.accompanist.permissions)
+    implementation(libs.mlkit.text.recognition)
+
+    // Optional: If you need Compose integration for Glide
+    implementation(libs.glide.compose)
+
 }
