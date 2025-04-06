@@ -1,7 +1,6 @@
 package com.example.electrosplitapp
 
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -19,21 +18,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.example.electrosplitapp.ui.theme.ElectrosplitAppTheme
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import java.io.InputStream
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
+
 class MainActivity : ComponentActivity() {
     private val billService by lazy {
         Retrofit.Builder()
-            .baseUrl("http://192.168.1.2:8080/")
+            .baseUrl("http://192.168.1.6:8080/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(BillService::class.java)
@@ -125,7 +124,7 @@ fun ElectrosplitApp(billService: BillService) {
                 result = ""
                 Log.d("CameraFlow", "Starting meter scanning")
             },
-            modifier =  Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Scan Meter")
         }
@@ -147,13 +146,13 @@ fun ElectrosplitApp(billService: BillService) {
         )
 
         if (isScanning) {
-            Spacer(modifier =  Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Column(
-                modifier =  Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 CircularProgressIndicator()
-                Spacer(modifier =  Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text("Processing...")
             }
         }
@@ -179,52 +178,24 @@ fun ElectrosplitApp(billService: BillService) {
 
 private fun processImageFromUri(context: Context, uri: Uri, onResult: (String) -> Unit) {
     try {
-        val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        inputStream?.close()
+        val inputStream = context.contentResolver.openInputStream(uri)!!
+        val jpegBytes = inputStream.readBytes() // Keep as original JPEG
+        inputStream.close()
 
-        if (bitmap !=  null) {
-            val processedBitmap = ImagePreprocessor.preprocessBitmap(bitmap)
-            val image = InputImage.fromBitmap(processedBitmap, 0)
-
-            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                .process(image)
-                .addOnSuccessListener { visionText ->
-                    extractMeterReading(visionText)?.let { reading ->
-                        onResult(reading)
-                    } ?: onResult("No valid reading found")
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Pass JPEG bytes DIRECTLY to Roboflow
+                val reading = RoboflowService.detectDigitsFromJpegBytes(jpegBytes)
+                withContext(Dispatchers.Main) {
+                    onResult(reading)
                 }
-                .addOnFailureListener { e ->
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
                     onResult("Error: ${e.message}")
-                    Log.e("GalleryFlow", "Image processing  failed", e)
                 }
-        } else {
-            onResult("Failed to load image")
-            Log.e("GalleryFlow", "Bitmap decoding  failed")
+            }
         }
     } catch (e: Exception) {
         onResult("Error: ${e.message}")
-        Log.e("GalleryFlow", "Image processing exception", e)
-    }
-}
-
-private fun extractMeterReading(visionText: Text): String? {
-    // Get all potential number sequences
-    val numberSequences = visionText.textBlocks
-        .flatMap { block -> block.lines }
-        .map { line -> line.text.replace(Regex("[^0-9]"), "") }
-        .filter { it  .length in 4  ..8  }
-
-    Log.d(  "  OCR_CANDIDATES  ",  "  Potential readings: $numberSequences  "  )
-
-    // Simple scoring - prefer longer sequences
-    return numberSequences.maxByOrNull { it  .  length }  ?.  let {
-        when  {
-            it  .  contains(  '.'  )  -> it  .  take(  8  )  // Preserve decimals
-            it  .  length  >=  5  ->  "  ${it  .  dropLast  (  1  )  }  .  ${  it  .  takeLast  (  1  )  }  "  // Add decimal
-            else  ->  it
-        }  .  also  { result  ->
-            Log  .  d  (  "  OCR_RESULT  ",  "  Selected reading: $  result  "  )
-        }
     }
 }

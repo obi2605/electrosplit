@@ -83,4 +83,8 @@ dependencies {
     // Optional: If you need Compose integration for Glide
     implementation(libs.glide.compose)
 
+    implementation(libs.okhttp) // For API calls (already added to libs.versions.toml)
+    implementation(libs.kotlinx.coroutines.android) // If not already
+    
+
 }

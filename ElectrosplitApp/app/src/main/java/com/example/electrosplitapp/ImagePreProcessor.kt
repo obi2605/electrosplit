@@ -1,4 +1,4 @@
-package com.example.electrosplitapp
+/*package com.example.electrosplitapp
 
 import android.graphics.*
 
@@ -129,4 +129,4 @@ object ImagePreprocessor {
         // Implement EXIF rotation handling if needed
         return bitmap
     }
-}
+}*/

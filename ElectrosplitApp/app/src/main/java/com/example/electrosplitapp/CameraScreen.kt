@@ -2,13 +2,13 @@ package com.example.electrosplitapp
 
 import android.Manifest
 import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -23,17 +23,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
-import kotlin.math.abs
+import android.view.Surface
+
+
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
@@ -41,22 +41,15 @@ fun CameraScreen(
     onTextRecognized: (String) -> Unit,
     onClose: () -> Unit
 ) {
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-
-    // States
     var hasCameraPermission by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Preparing camera...") }
-    var isScanning by remember { mutableStateOf(false) }
-    var lastDetectionTime by remember { mutableLongStateOf(0L) }
-    var stableReading by remember { mutableStateOf<String?>(null) }
-    var readingConfidence by remember { mutableIntStateOf(0) }
+    val isScanning by remember { mutableStateOf(false) }
 
-    // Permission launcher
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted ->
             hasCameraPermission = granted
-            if (!granted) statusMessage = "Camera permission required"
+            statusMessage = if (granted) "Ready to scan" else "Camera permission required"
         }
     )
 
@@ -78,72 +71,49 @@ fun CameraScreen(
                     cameraProviderFuture.addListener({
                         try {
                             val cameraProvider = cameraProviderFuture.get()
-
-                            // Preview
                             val preview = Preview.Builder()
+                                .setTargetRotation(Surface.ROTATION_0) // Optional: Match preview rotation
                                 .build()
                                 .also { it.surfaceProvider = previewView.surfaceProvider }
 
-                            // Analyzer
+                            // KEY FIX: Force upright orientation for analysis
                             val imageAnalyzer = ImageAnalysis.Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                                .setTargetRotation(Surface.ROTATION_0) // Force upright orientation
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // Only process latest frame
                                 .build()
                                 .also { analyzer ->
-                                    analyzer.setAnalyzer(executor, createAnalyzer { visionText ->
-                                        val now = System.currentTimeMillis()
-                                        if (now - lastDetectionTime > 500) { // 500ms between scans
-                                            lastDetectionTime = now
-                                            val reading = extractMeterReading(visionText)
-                                            if (reading != null) {
-                                                if (stableReading == reading) {
-                                                    readingConfidence++
-                                                    if (readingConfidence >= 3) { // Require 3 consistent readings
-                                                        onTextRecognized(reading)
-                                                        stableReading = null
-                                                        readingConfidence = 0
-                                                    }
-                                                } else {
-                                                    stableReading = reading
-                                                    readingConfidence = 1
-                                                }
-                                            }
-                                        }
+                                    analyzer.setAnalyzer(executor, createAnalyzer { result ->
+                                        analyzer.clearAnalyzer() // Stop further analysis after first result
+                                        onTextRecognized(result)
                                     })
                                 }
 
-                            // Bind use cases
                             cameraProvider.unbindAll()
                             cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
+                                (ctx as ComponentActivity),
                                 CameraSelector.DEFAULT_BACK_CAMERA,
                                 preview,
                                 imageAnalyzer
                             )
-
-                            isScanning = true
-                            statusMessage = "Hold steady for 2 seconds"
-
                         } catch (e: Exception) {
-                            statusMessage = "Camera error"
-                            Log.e("CameraScreen", "Setup failed", e)
+                            Log.e("CAMERA", "Setup failed", e)
                         }
                     }, ContextCompat.getMainExecutor(ctx))
-
                     previewView
-                },
-                modifier = Modifier.fillMaxSize()
+                }
             )
         }
 
         // Visual guide overlay
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width * 0.8f
-            val height = size.height * 0.25f
+            val height = size.height * 0.3f
             drawRect(
-                color = Color.Yellow.copy(alpha = 0.3f),
+                color = Color.Yellow.copy(alpha = 0.2f),
                 topLeft = Offset((size.width - width)/2, (size.height - height)/2),
                 size = Size(width, height),
-                style = Stroke(width = 5f)
+                style = Stroke(width = 4f)
             )
         }
 
@@ -163,11 +133,7 @@ fun CameraScreen(
             )
             if (isScanning) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Confidence: $readingConfidence/3",
-                    color = Color.White.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                CircularProgressIndicator()
             }
         }
 
@@ -190,50 +156,29 @@ fun CameraScreen(
 
 @OptIn(ExperimentalGetImage::class)
 private fun createAnalyzer(
-    onTextDetected: (Text) -> Unit
-): ImageAnalysis.Analyzer = ImageAnalysis.Analyzer { imageProxy ->
-    try {
-        val mediaImage = imageProxy.image ?: return@Analyzer
-        val image = InputImage.fromMediaImage(
-            mediaImage,
-            imageProxy.imageInfo.rotationDegrees
-        )
+    onResult: (String) -> Unit
+): ImageAnalysis.Analyzer {
+    var isProcessing = false
 
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                Log.d("OCR_DEBUG", "Raw text detected: ${visionText.text}")
-                onTextDetected(visionText)
-            }
-            .addOnFailureListener { e ->
-                Log.e("OCR_ERROR", "Recognition failed", e)
-            }
-            .addOnCompleteListener {
+    return ImageAnalysis.Analyzer { imageProxy ->
+        if (imageProxy.image == null || isProcessing) {
+            imageProxy.close()
+            return@Analyzer
+        }
+
+        isProcessing = true
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val reading = RoboflowService.detectDigits(imageProxy)
+                withContext(Dispatchers.Main) {
+                    onResult(reading)
+                }
+            } catch (e: Exception) {
+                Log.e("CAMERA", "Analysis failed", e)
+            } finally {
+                isProcessing = false
                 imageProxy.close()
             }
-    } catch (e: Exception) {
-        Log.e("ANALYZER_ERROR", "Image analysis failed", e)
-        imageProxy.close()
-    }
-}
-
-private fun extractMeterReading(visionText: Text): String? {
-    // Get all potential number sequences
-    val numberSequences = visionText.textBlocks
-        .flatMap { block -> block.lines }
-        .map { line -> line.text.replace(Regex("[^0-9.]"), "") }
-        .filter { it.length in 4..8 }
-
-    Log.d("OCR_CANDIDATES", "Potential readings: $numberSequences")
-
-    // Simple scoring - prefer longer sequences
-    return numberSequences.maxByOrNull { it.length }?.let {
-        when {
-            it.contains('.') -> it.take(8) // Preserve decimals
-            it.length >= 5 -> "${it.dropLast(1)}.${it.takeLast(1)}" // Add decimal
-            else -> it
-        }.also { result ->
-            Log.d("OCR_RESULT", "Selected reading: $result")
         }
     }
 }

@@ -1,10 +1,6 @@
 package com.example.electrosplitapp
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
+import android.graphics.*
 import android.media.Image
 import java.io.ByteArrayOutputStream
 
@@ -25,8 +21,7 @@ object BitmapUtils {
 
         val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
         val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 100, out)
-        val imageBytes = out.toByteArray()
-        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 80, out)
+        return BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size())
     }
 }
