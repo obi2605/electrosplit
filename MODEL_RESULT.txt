@@ -1,0 +1,1 @@
+{"message":"Could not load input image. Cause: Empty image payload."}

@@ -32,7 +32,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 class MainActivity : ComponentActivity() {
     private val billService by lazy {
         Retrofit.Builder()
-            .baseUrl("http://192.168.1.6:8080/")
+            .baseUrl("http://192.168.1.2:8080/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(BillService::class.java)

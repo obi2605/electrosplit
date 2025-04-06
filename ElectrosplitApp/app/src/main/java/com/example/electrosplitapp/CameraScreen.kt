@@ -13,7 +13,6 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,12 +27,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import android.view.Surface
-
-
+import androidx.compose.foundation.background
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
@@ -43,18 +42,35 @@ fun CameraScreen(
 ) {
     var hasCameraPermission by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Preparing camera...") }
-    val isScanning by remember { mutableStateOf(false) }
+    var isScanning by remember { mutableStateOf(false) }
+    var shouldAnalyzeFrames by remember { mutableStateOf(false) }
+    var countdown by remember { mutableIntStateOf(2) } // Countdown from 2 seconds
+
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted ->
             hasCameraPermission = granted
-            statusMessage = if (granted) "Ready to scan" else "Camera permission required"
+            statusMessage = if (granted) "Steady your device (2)..." else "Camera permission required"
         }
     )
 
     LaunchedEffect(Unit) {
         launcher.launch(Manifest.permission.CAMERA)
+    }
+
+    // Countdown timer
+    LaunchedEffect(hasCameraPermission) {
+        if (hasCameraPermission) {
+            while (countdown > 0) {
+                delay(1000)
+                countdown--
+                statusMessage = "Steady your device ($countdown)..."
+            }
+            shouldAnalyzeFrames = true
+            statusMessage = "Scanning now..."
+            isScanning = true
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -72,21 +88,23 @@ fun CameraScreen(
                         try {
                             val cameraProvider = cameraProviderFuture.get()
                             val preview = Preview.Builder()
-                                .setTargetRotation(Surface.ROTATION_0) // Optional: Match preview rotation
+                                .setTargetRotation(Surface.ROTATION_0)
                                 .build()
                                 .also { it.surfaceProvider = previewView.surfaceProvider }
 
-                            // KEY FIX: Force upright orientation for analysis
                             val imageAnalyzer = ImageAnalysis.Builder()
                                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                                .setTargetRotation(Surface.ROTATION_0) // Force upright orientation
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // Only process latest frame
+                                .setTargetRotation(Surface.ROTATION_0)
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build()
                                 .also { analyzer ->
-                                    analyzer.setAnalyzer(executor, createAnalyzer { result ->
-                                        analyzer.clearAnalyzer() // Stop further analysis after first result
-                                        onTextRecognized(result)
-                                    })
+                                    analyzer.setAnalyzer(executor, createDelayedAnalyzer(
+                                        shouldAnalyze = { shouldAnalyzeFrames },
+                                        onResult = { result ->
+                                            analyzer.clearAnalyzer()
+                                            onTextRecognized(result)
+                                        }
+                                    ))
                                 }
 
                             cameraProvider.unbindAll()
@@ -131,7 +149,10 @@ fun CameraScreen(
                 color = Color.White,
                 style = MaterialTheme.typography.bodyLarge
             )
-            if (isScanning) {
+            if (hasCameraPermission && !shouldAnalyzeFrames) {
+                Spacer(modifier = Modifier.height(8.dp))
+                CircularProgressIndicator()
+            } else if (isScanning) {
                 Spacer(modifier = Modifier.height(8.dp))
                 CircularProgressIndicator()
             }
@@ -155,13 +176,14 @@ fun CameraScreen(
 }
 
 @OptIn(ExperimentalGetImage::class)
-private fun createAnalyzer(
+private fun createDelayedAnalyzer(
+    shouldAnalyze: () -> Boolean,
     onResult: (String) -> Unit
 ): ImageAnalysis.Analyzer {
     var isProcessing = false
 
     return ImageAnalysis.Analyzer { imageProxy ->
-        if (imageProxy.image == null || isProcessing) {
+        if (imageProxy.image == null || isProcessing || !shouldAnalyze()) {
             imageProxy.close()
             return@Analyzer
         }
