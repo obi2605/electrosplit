@@ -21,9 +21,9 @@ import java.util.concurrent.TimeUnit
 
 object RoboflowService {
     private const val API_KEY = "420L33QgmZR2CScgiOwi"
+    private const val MODEL_ENDPOINT = "metersocr7" // Changed from "white-numbers0 model"
     private const val MODEL_VERSION = "1"
 
-    // Using basic OkHttp client without logging interceptor
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -93,12 +93,11 @@ object RoboflowService {
     suspend fun detectDigitsFromJpegBytes(jpegBytes: ByteArray): String {
         return withContext(Dispatchers.IO) {
             try {
-                // Method that matches your working curl command exactly
                 val base64Image = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
                 val requestBody = base64Image.toRequestBody("application/x-www-form-urlencoded".toMediaType())
 
                 val request = Request.Builder()
-                    .url("https://detect.roboflow.com/white-numbers/$MODEL_VERSION?api_key=$API_KEY")
+                    .url("https://detect.roboflow.com/$MODEL_ENDPOINT/$MODEL_VERSION?api_key=$API_KEY")
                     .post(requestBody)
                     .addHeader("Content-Type", "application/x-www-form-urlencoded")
                     .build()
@@ -126,32 +125,44 @@ object RoboflowService {
             val root = JSONObject(json)
             when {
                 root.has("error") -> "API Error: ${root.getString("error")}"
-                !root.has("predictions") -> {
-                    Log.d("ROBOFLOW", "No predictions in response: $json")
-                    "No digits detected"
-                }
+                !root.has("predictions") -> "No digits detected"
                 else -> {
                     val predictions = root.getJSONArray("predictions")
                     if (predictions.length() == 0) {
                         "No readable digits"
                     } else {
-                        predictions
+                        // 1. Filter and sort with confidence threshold
+                        val validDigits = predictions
                             .let { 0.until(it.length()).map { i -> it.getJSONObject(i) } }
-                            .sortedBy { it.getDouble("x") }
-                            .joinToString("") { it.getString("class") }
-                            .let { digits ->
-                                when {
-                                    digits.isEmpty() -> "0.0"
-                                    digits.length == 1 -> "0.$digits"
-                                    else -> "${digits.dropLast(1)}.${digits.takeLast(1)}"
-                                } + " kWh"
+                            .filter {
+                                it.getString("class").startsWith("D") &&
+                                        it.getDouble("confidence") >= 0.75
                             }
+                            .sortedBy { it.getDouble("x") } // Sort by x-position AFTER filtering
+
+                        // 2. Extract digits in correct left-to-right order
+                        val digits = validDigits.joinToString("") {
+                            it.getString("class").removePrefix("D")
+                        }
+
+                        // 3. Apply strict digit formatting rules
+                        when {
+                            digits.isEmpty() -> "0.0 kWh"
+                            digits.length == 5 -> "${digits}.0 kWh" // 12345 → 12345.0
+                            digits.length >= 6 -> {
+                                "${digits.dropLast(1)}.${digits.takeLast(1)} kWh" // 123456 → 12345.6
+                            }
+                            else -> {
+                                // For <5 digits, pad with leading zeros before decimal
+                                val padded = digits.padStart(5, '0')
+                                "${padded.dropLast(1)}.${padded.takeLast(1)} kWh" // 578 → 0057.8
+                            }
+                        }
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e("ROBOFLOW", "Parse error: $json", e)
+            Log.e("ROBOFLOW", "Parse error", e)
             "Parse Error"
         }
-    }
-}
+    }}
