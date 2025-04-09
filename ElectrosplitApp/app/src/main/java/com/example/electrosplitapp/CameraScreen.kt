@@ -6,13 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
-import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +22,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -32,11 +31,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import android.view.Surface
-import androidx.compose.foundation.background
+import androidx.camera.core.CameraSelector
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
 fun CameraScreen(
+    visionService: VisionService,
     onTextRecognized: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -44,7 +46,7 @@ fun CameraScreen(
     var statusMessage by remember { mutableStateOf("Preparing camera...") }
     var isScanning by remember { mutableStateOf(false) }
     var shouldAnalyzeFrames by remember { mutableStateOf(false) }
-    var countdown by remember { mutableIntStateOf(2) } // Countdown from 2 seconds
+    var countdown by remember { mutableIntStateOf(2) }
 
 
     val launcher = rememberLauncherForActivityResult(
@@ -59,7 +61,6 @@ fun CameraScreen(
         launcher.launch(Manifest.permission.CAMERA)
     }
 
-    // Countdown timer
     LaunchedEffect(hasCameraPermission) {
         if (hasCameraPermission) {
             while (countdown > 0) {
@@ -70,6 +71,12 @@ fun CameraScreen(
             shouldAnalyzeFrames = true
             statusMessage = "Scanning now..."
             isScanning = true
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            visionService.shutdown()
         }
     }
 
@@ -99,6 +106,7 @@ fun CameraScreen(
                                 .build()
                                 .also { analyzer ->
                                     analyzer.setAnalyzer(executor, createDelayedAnalyzer(
+                                        visionService = visionService,
                                         shouldAnalyze = { shouldAnalyzeFrames },
                                         onResult = { result ->
                                             analyzer.clearAnalyzer()
@@ -123,7 +131,6 @@ fun CameraScreen(
             )
         }
 
-        // Visual guide overlay
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width * 0.8f
             val height = size.height * 0.3f
@@ -135,7 +142,6 @@ fun CameraScreen(
             )
         }
 
-        // Status message
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -158,7 +164,6 @@ fun CameraScreen(
             }
         }
 
-        // Cancel button
         Button(
             onClick = onClose,
             modifier = Modifier
@@ -177,6 +182,7 @@ fun CameraScreen(
 
 @OptIn(ExperimentalGetImage::class)
 private fun createDelayedAnalyzer(
+    visionService: VisionService,
     shouldAnalyze: () -> Boolean,
     onResult: (String) -> Unit
 ): ImageAnalysis.Analyzer {
@@ -191,7 +197,7 @@ private fun createDelayedAnalyzer(
         isProcessing = true
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val reading = RoboflowService.detectDigits(imageProxy)
+                val reading = visionService.detectDigits(imageProxy)
                 withContext(Dispatchers.Main) {
                     onResult(reading)
                 }
