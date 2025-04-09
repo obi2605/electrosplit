@@ -29,17 +29,19 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 class MainActivity : ComponentActivity() {
-    private val visionService by lazy { VisionService(applicationContext) }
-    private val billService by lazy {
-        Retrofit.Builder()
+    private lateinit var visionService: VisionService
+    private lateinit var billService: BillService
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        visionService = VisionService(applicationContext)
+        billService = Retrofit.Builder()
             .baseUrl("http://192.168.1.2:8080/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(BillService::class.java)
-    }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         setContent {
             ElectrosplitAppTheme {
                 ElectrosplitApp(visionService, billService)
