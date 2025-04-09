@@ -32,7 +32,6 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import android.view.Surface
 import androidx.camera.core.CameraSelector
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalGetImage::class)
@@ -47,7 +46,6 @@ fun CameraScreen(
     var isScanning by remember { mutableStateOf(false) }
     var shouldAnalyzeFrames by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(2) }
-
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -71,12 +69,6 @@ fun CameraScreen(
             shouldAnalyzeFrames = true
             statusMessage = "Scanning now..."
             isScanning = true
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            visionService.shutdown()
         }
     }
 
@@ -203,6 +195,9 @@ private fun createDelayedAnalyzer(
                 }
             } catch (e: Exception) {
                 Log.e("CAMERA", "Analysis failed", e)
+                withContext(Dispatchers.Main) {
+                    onResult("Error: ${e.message}")
+                }
             } finally {
                 isProcessing = false
                 imageProxy.close()
