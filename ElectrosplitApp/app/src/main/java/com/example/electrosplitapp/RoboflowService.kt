@@ -21,8 +21,8 @@ import java.util.concurrent.TimeUnit
 
 object RoboflowService {
     private const val API_KEY = "420L33QgmZR2CScgiOwi"
-    private const val MODEL_ENDPOINT = "metersocr7" // Changed from "white-numbers0 model"
-    private const val MODEL_VERSION = "1"
+    private const val MODEL_ENDPOINT = "7seg-fzxkn" // Changed from "white-numbers0 model"
+    private const val MODEL_VERSION = "2"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
