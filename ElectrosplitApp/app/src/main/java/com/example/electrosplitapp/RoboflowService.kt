@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 object RoboflowService {
     private const val API_KEY = "420L33QgmZR2CScgiOwi"
-    private const val MODEL_ENDPOINT = "7seg-fzxkn" // Changed from "white-numbers0 model"
+    private const val MODEL_ENDPOINT = "7seg-fzxkn"
     private const val MODEL_VERSION = "2"
 
     private val client = OkHttpClient.Builder()
@@ -65,7 +65,7 @@ object RoboflowService {
         }
 
         return ByteArrayOutputStream().use { output ->
-            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)
+            rotatedBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
             output.toByteArray()
         }.also {
             image.close()
@@ -123,46 +123,62 @@ object RoboflowService {
     private fun parseAndFormatResponse(json: String): String {
         return try {
             val root = JSONObject(json)
-            when {
-                root.has("error") -> "API Error: ${root.getString("error")}"
-                !root.has("predictions") -> "No digits detected"
-                else -> {
-                    val predictions = root.getJSONArray("predictions")
-                    if (predictions.length() == 0) {
-                        "No readable digits"
-                    } else {
-                        // 1. Filter and sort with confidence threshold
-                        val validDigits = predictions
-                            .let { 0.until(it.length()).map { i -> it.getJSONObject(i) } }
-                            .filter {
-                                it.getString("class").startsWith("D") &&
-                                        it.getDouble("confidence") >= 0.75
-                            }
-                            .sortedBy { it.getDouble("x") } // Sort by x-position AFTER filtering
+            if (root.has("error")) return "API Error: ${root.getString("error")}"
+            if (!root.has("predictions")) return "No digits detected"
 
-                        // 2. Extract digits in correct left-to-right order
-                        val digits = validDigits.joinToString("") {
-                            it.getString("class").removePrefix("D")
-                        }
+            val predictions = root.getJSONArray("predictions")
+            if (predictions.length() == 0) return "No readable digits"
 
-                        // 3. Apply strict digit formatting rules
-                        when {
-                            digits.isEmpty() -> "0.0 kWh"
-                            digits.length == 5 -> "${digits}.0 kWh" // 12345 → 12345.0
-                            digits.length >= 6 -> {
-                                "${digits.dropLast(1)}.${digits.takeLast(1)} kWh" // 123456 → 12345.6
-                            }
-                            else -> {
-                                // For <5 digits, pad with leading zeros before decimal
-                                val padded = digits.padStart(5, '0')
-                                "${padded.dropLast(1)}.${padded.takeLast(1)} kWh" // 578 → 0057.8
-                            }
-                        }
-                    }
+            val all = (0 until predictions.length()).map { predictions.getJSONObject(it) }
+
+            val digitsOnly = all.filter {
+                it.getString("class").startsWith("D") && it.getDouble("confidence") >= 0.5
+            }.sortedBy { it.getDouble("x") }
+
+            val totdec = all.find {
+                it.getString("class") == "TOTDEC" && it.getDouble("confidence") >= 0.5
+            }
+
+            if (digitsOnly.isEmpty()) return "0.0 kWh"
+
+            val digitValues = digitsOnly.map { it.getString("class").removePrefix("D") }
+            val digitX = digitsOnly.map { it.getDouble("x") }
+
+            // Only use TOTDEC if it appears before the last digit
+            val shouldUseTotdec = totdec != null && totdec.getDouble("x") < digitX.last()
+
+            return if (shouldUseTotdec) {
+                val totX = totdec!!.getDouble("x")
+
+                val decimalIndex = digitX.indexOfFirst { it > totX }.let {
+                    if (it == -1) digitValues.size else it
+                }
+
+                val beforeDecimal = digitValues.take(decimalIndex).joinToString("")
+                val afterDecimal = digitValues.drop(decimalIndex).joinToString("")
+
+                val formatted = when {
+                    beforeDecimal.isEmpty() && afterDecimal.isEmpty() -> "0.0"
+                    beforeDecimal.isEmpty() -> "0.$afterDecimal"
+                    afterDecimal.isEmpty() -> "$beforeDecimal.0"
+                    else -> "$beforeDecimal.$afterDecimal"
+                }
+
+                "$formatted kWh"
+            } else {
+                val digits = digitValues.joinToString("")
+                val digitCount = digits.length
+
+                when {
+                    digitCount >= 2 -> "${digits.dropLast(1)}.${digits.takeLast(1)} kWh"
+                    digitCount == 1 -> "0.${digits} kWh"
+                    else -> "0.0 kWh"
                 }
             }
+
         } catch (e: Exception) {
             Log.e("ROBOFLOW", "Parse error", e)
             "Parse Error"
         }
-    }}
+    }
+}
