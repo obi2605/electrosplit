@@ -28,8 +28,8 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-
 class MainActivity : ComponentActivity() {
+    private val visionService by lazy { VisionService(applicationContext) }
     private val billService by lazy {
         Retrofit.Builder()
             .baseUrl("http://192.168.1.2:8080/")
@@ -42,14 +42,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ElectrosplitAppTheme {
-                ElectrosplitApp(billService)
+                ElectrosplitApp(visionService, billService)
             }
         }
+    }
+
+    override fun onDestroy() {
+        visionService.shutdown()
+        super.onDestroy()
     }
 }
 
 @Composable
-fun ElectrosplitApp(billService: BillService) {
+fun ElectrosplitApp(visionService: VisionService, billService: BillService) {
     var consumerNumber by remember { mutableStateOf("") }
     var operator by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
@@ -63,7 +68,7 @@ fun ElectrosplitApp(billService: BillService) {
             uri?.let {
                 isScanning = true
                 result = "Processing image..."
-                processImageFromUri(context, it) { reading ->
+                processImageFromUri(context, visionService, it) { reading ->
                     isScanning = false
                     result = "Meter Reading: $reading"
                     Log.d("GalleryFlow", "Recognized meter: $reading")
@@ -160,6 +165,7 @@ fun ElectrosplitApp(billService: BillService) {
 
     if (showCamera) {
         CameraScreen(
+            visionService = visionService,
             onTextRecognized = { text ->
                 showCamera = false
                 isScanning = false
@@ -176,16 +182,20 @@ fun ElectrosplitApp(billService: BillService) {
     }
 }
 
-private fun processImageFromUri(context: Context, uri: Uri, onResult: (String) -> Unit) {
+private fun processImageFromUri(
+    context: Context,
+    visionService: VisionService,
+    uri: Uri,
+    onResult: (String) -> Unit
+) {
     try {
         val inputStream = context.contentResolver.openInputStream(uri)!!
-        val jpegBytes = inputStream.readBytes() // Keep as original JPEG
+        val jpegBytes = inputStream.readBytes()
         inputStream.close()
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Pass JPEG bytes DIRECTLY to Roboflow
-                val reading = RoboflowService.detectDigitsFromJpegBytes(jpegBytes)
+                val reading = visionService.detectDigitsFromJpegBytes(jpegBytes)
                 withContext(Dispatchers.Main) {
                     onResult(reading)
                 }
