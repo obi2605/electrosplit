@@ -4,7 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.example.electrosplitapp.data.AuthManager
 import com.example.electrosplitapp.ui.theme.ElectrosplitAppTheme
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -12,6 +14,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 class MainActivity : ComponentActivity() {
     private lateinit var visionService: VisionService
     private lateinit var billService: BillService
+    private lateinit var authManager: AuthManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -19,12 +22,22 @@ class MainActivity : ComponentActivity() {
         // Initialize services
         visionService = VisionService(applicationContext)
         billService = createBillService()
+        authManager = AuthManager(applicationContext)
 
         setContent {
-            ElectrosplitAppTheme {
-                Surface(color = Color.White) {
-                    MainApp(visionService, billService)
-                }
+            AppContent()
+        }
+    }
+
+    @Composable
+    private fun AppContent() {
+        ElectrosplitAppTheme {
+            Surface(color = Color.White) {
+                MainApp(
+                    visionService = visionService,
+                    billService = billService,
+                    authManager = authManager
+                )
             }
         }
     }
