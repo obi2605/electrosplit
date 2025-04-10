@@ -119,4 +119,8 @@ dependencies {
 
     // Utilities
     implementation(libs.accompanist.permissions)
+
+    // Add these to your dependencies block
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 }
