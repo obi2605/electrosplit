@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import retrofit2.Response
+
 
 class BillViewModel(
     private val billService: BillService,
@@ -40,7 +40,7 @@ class BillViewModel(
         fetchBill()
     }
 
-    fun fetchBill() {
+    private fun fetchBill() {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null

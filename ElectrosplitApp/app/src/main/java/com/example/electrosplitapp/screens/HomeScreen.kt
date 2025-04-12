@@ -55,7 +55,7 @@ fun HomeScreen(
         }
     )
 
-    // Updated state collection to use billResponse instead of billDetails
+    // State collection
     val billResponse by viewModel.billResponse.collectAsState(initial = null)
     val isLoading by viewModel.isLoading.collectAsState(initial = false)
     val errorMessage by viewModel.errorMessage.collectAsState(initial = null)
@@ -85,7 +85,6 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Updated AccountInfoCard to use billResponse
             AccountInfoCard(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
@@ -135,8 +134,8 @@ fun HomeScreen(
     if (showManualDialog) {
         ManualReadingDialog(
             initialValue = manualReading,
-            totalUnits = billResponse?.totalUnits?.toFloat() ?: 0f,
             totalAmount = billResponse?.totalAmount?.toFloat() ?: 0f,
+            totalUnits = billResponse?.totalUnits?.toFloat() ?: 0f,
             groupSize = 1,
             onDismiss = { showManualDialog = false },
             onSubmit = { reading, result ->
@@ -295,19 +294,20 @@ private fun CalculationResultCard(amount: Float, onViewBreakdown: () -> Unit) {
 @Composable
 private fun ManualReadingDialog(
     initialValue: String,
-    totalUnits: Float,
     totalAmount: Float,
+    totalUnits: Float,
     groupSize: Int,
     onDismiss: () -> Unit,
     onSubmit: (String, BillCalculator.SplitResult) -> Unit
 ) {
     var reading by remember { mutableStateOf(initialValue) }
+    var showBreakdown by remember { mutableStateOf(false) }
     val cleanReading = remember(reading) {
         reading.replace("[^0-9.]".toRegex(), "").takeIf { it.isNotEmpty() } ?: "0"
     }
 
-    val splitResult = remember(cleanReading, totalUnits, totalAmount, groupSize) {
-        if (cleanReading.isNotEmpty()) {
+    val splitResult = remember(cleanReading, totalAmount, totalUnits, groupSize) {
+        if (cleanReading.isNotEmpty() && cleanReading != "0") {
             val userReading = BillCalculator.parseReading(cleanReading)
             BillCalculator.calculateSplit(
                 totalBillAmount = totalAmount,
@@ -315,7 +315,16 @@ private fun ManualReadingDialog(
                 individualReadings = listOf(userReading),
                 groupSize = groupSize
             )
-        } else null
+        } else {
+            // Return zero result if no valid reading
+            BillCalculator.SplitResult(
+                individualBills = listOf(BillCalculator.MemberBill(0f, 0f)),
+                commonAmount = 0f,
+                commonSharePerMember = 0f,
+                totalBillAmount = totalAmount,
+                totalUnits = totalUnits
+            )
+        }
     }
 
     AlertDialog(
@@ -326,7 +335,7 @@ private fun ManualReadingDialog(
                 OutlinedTextField(
                     value = reading,
                     onValueChange = { reading = it },
-                    label = { Text("Current Reading") },
+                    label = { Text("Current Reading (kWh)") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal
                     ),
@@ -334,7 +343,7 @@ private fun ManualReadingDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (cleanReading.isNotEmpty()) {
+                if (cleanReading.isNotEmpty() && cleanReading != "0") {
                     Text(
                         text = "Reading: ${cleanReading.toFloat()} kWh",
                         modifier = Modifier.padding(top = 8.dp)
@@ -343,19 +352,23 @@ private fun ManualReadingDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                splitResult?.let { result ->
-                    val yourShare = result.individualBills.first().amountToPay
+                val yourShare = splitResult.individualBills.first().amountToPay
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Your Share: ₹${"%.2f".format(yourShare)}",
                         style = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.primary
                         )
                     )
-                    if (groupSize > 1) {
-                        Text(
-                            text = "Includes ${"%.2f".format(result.commonSharePerMember)} kWh common usage",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+
+                    if (cleanReading.isNotEmpty() && cleanReading != "0") {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(
+                            onClick = { showBreakdown = true },
+                            modifier = Modifier.padding(0.dp)
+                        ) {
+                            Text("How?")
+                        }
                     }
                 }
             }
@@ -363,11 +376,11 @@ private fun ManualReadingDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (splitResult != null) {
+                    if (cleanReading.isNotEmpty() && cleanReading != "0") {
                         onSubmit(cleanReading, splitResult)
                     }
                 },
-                enabled = splitResult != null
+                enabled = cleanReading.isNotEmpty() && cleanReading != "0"
             ) {
                 Text("Confirm")
             }
@@ -378,6 +391,21 @@ private fun ManualReadingDialog(
             }
         }
     )
+
+    if (showBreakdown) {
+        AlertDialog(
+            onDismissRequest = { showBreakdown = false },
+            title = { Text("Calculation Breakdown") },
+            text = {
+                Text(splitResult.getFormattedBreakdown())
+            },
+            confirmButton = {
+                Button(onClick = { showBreakdown = false }) {
+                    Text("Got It")
+                }
+            }
+        )
+    }
 }
 
 @Composable
