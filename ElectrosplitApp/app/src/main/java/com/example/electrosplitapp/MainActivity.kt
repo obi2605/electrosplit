@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
 
     private fun createBillService(): BillService {
         return Retrofit.Builder()
-            .baseUrl("http://192.168.1.2:8080/") // Replace with your actual base URL
+            .baseUrl("http://192.168.1.3:8080/") // Replace with your actual base URL
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(BillService::class.java)

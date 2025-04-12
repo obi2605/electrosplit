@@ -6,27 +6,28 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.electrosplitapp.BillDetailsResponse
+import com.example.electrosplitapp.CameraScreen
 import com.example.electrosplitapp.VisionService
+import com.example.electrosplitapp.utils.BillCalculator
 import com.example.electrosplitapp.viewmodels.BillViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-// CORRECT Material 3 Icon imports
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Keyboard
-import com.example.electrosplitapp.CameraScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,31 +38,38 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var showCamera by remember { mutableStateOf(false) }
-    var showGallery by remember { mutableStateOf(false) }
     var manualReading by remember { mutableStateOf("") }
     var showManualDialog by remember { mutableStateOf(false) }
     var calculatedBill by remember { mutableStateOf<Float?>(null) }
 
-    // Gallery Launcher
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
-        onResult = { uri ->
+        onResult = { uri: Uri? ->
             uri?.let {
-                processImageFromUri(context, visionService, it) { reading ->
+                processImageFromUri(context, visionService, it) { reading: String ->
                     manualReading = reading
                     showManualDialog = true
                 }
             }
-            showGallery = false
         }
     )
+
+    // Collect StateFlow values
+    val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val billDetails by viewModel.billDetails.collectAsState()
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Electrosplit") },
                 actions = {
-                    IconButton(onClick = onLogout) {
+                    IconButton(onClick = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            viewModel.logout()
+                            onLogout()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout")
                     }
                 }
@@ -73,12 +81,15 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Account Info Card
-            AccountInfoCard(viewModel)
+            AccountInfoCard(
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                billDetails = billDetails,
+                accountName = viewModel.accountName.collectAsState().value
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Meter Reading Section
             Text(
                 text = "Submit Meter Reading",
                 style = MaterialTheme.typography.titleMedium
@@ -86,14 +97,12 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Reading Options
             ReadingOptions(
                 onScanPressed = { showCamera = true },
                 onGalleryPressed = { galleryLauncher.launch("image/*") },
                 onManualPressed = { showManualDialog = true }
             )
 
-            // Calculation Result
             calculatedBill?.let { amount ->
                 Spacer(modifier = Modifier.height(24.dp))
                 CalculationResultCard(amount = amount)
@@ -118,7 +127,7 @@ fun HomeScreen(
             initialValue = manualReading,
             onDismiss = { showManualDialog = false },
             onSubmit = { reading ->
-                calculatedBill = calculateBillShare(reading.toFloat())
+                calculatedBill = calculateBillShare(reading)
                 showManualDialog = false
             }
         )
@@ -126,18 +135,55 @@ fun HomeScreen(
 }
 
 @Composable
-private fun AccountInfoCard(viewModel: BillViewModel) {
-    val accountName by viewModel.accountName.collectAsState()
-
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun AccountInfoCard(
+    isLoading: Boolean,
+    errorMessage: String?,
+    billDetails: BillDetailsResponse?,
+    accountName: String?
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = accountName ?: "My Account",
                 style = MaterialTheme.typography.titleLarge
             )
-            // Add more account info here
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                !errorMessage.isNullOrEmpty() -> {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                billDetails != null -> {
+                    Column {
+                        Text(
+                            text = "Total Units: ${billDetails.totalUnits} kWh",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Total Amount: ₹${"%.2f".format(billDetails.totalAmount)}",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Billing Period: ${billDetails.billingPeriod}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "Due Date: ${billDetails.dueDate}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -184,9 +230,7 @@ private fun ReadingOptions(
 
 @Composable
 private fun CalculationResultCard(amount: Float) {
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "Your Share",
@@ -212,15 +256,27 @@ private fun ManualReadingDialog(
         onDismissRequest = onDismiss,
         title = { Text("Enter Meter Reading") },
         text = {
-            OutlinedTextField(
-                value = reading,
-                onValueChange = { reading = it },
-                label = { Text("Current Reading") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column {
+                OutlinedTextField(
+                    value = reading,
+                    onValueChange = {
+                        reading = it.filter { c -> c.isDigit() || c == '.' }
+                    },
+                    label = { Text("Current Reading (kWh)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal
+                    ),
+                    suffix = { Text("kWh") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (reading.isNotEmpty()) {
+                    Text(
+                        text = "Reading: ${reading}kWh",
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
         },
         confirmButton = {
             Button(
@@ -238,9 +294,13 @@ private fun ManualReadingDialog(
     )
 }
 
-private fun calculateBillShare(reading: Float): Float {
-    // Implement your actual calculation logic here
-    return reading * 0.75f // Example calculation
+private fun calculateBillShare(reading: String): Float {
+    return try {
+        val units = reading.toFloat()
+        BillCalculator.calculateBill(units)
+    } catch (e: NumberFormatException) {
+        0f
+    }
 }
 
 private fun processImageFromUri(

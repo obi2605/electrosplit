@@ -6,6 +6,8 @@ data class BillRequest(
 )
 
 data class BillResponse(
+    val success: Boolean,  // Added to match API
+    val message: String,   // Added to match API
     val totalUnits: Int,
     val totalAmount: Double
 )
