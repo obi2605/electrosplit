@@ -3,7 +3,7 @@ package com.example.electrosplitapp.utils
 import kotlin.math.min
 
 object BillCalculator {
-    // Full tariff slab definition (exactly as in your original)
+    // Updated tariff slab definition
     private val tariffSlabs = listOf(
         TariffSlab(1, 100, 0f, 500),
         TariffSlab(101, 200, 2.35f, 500),
@@ -18,7 +18,6 @@ object BillCalculator {
         TariffSlab(1001, Int.MAX_VALUE, 11.55f, Int.MAX_VALUE)
     )
 
-    // Original data class maintained exactly
     data class TariffSlab(
         val fromUnit: Int,
         val toUnit: Int,
@@ -26,23 +25,14 @@ object BillCalculator {
         val maxUnits: Int
     )
 
-    /**
-     * Parses a meter reading string into a float value
-     * Handles leading zeros and decimal points
-     * (New method to address your requirements)
-     */
     fun parseReading(reading: String): Float {
         return try {
-            // Remove all non-digit/non-decimal characters and parse
             reading.replace("[^0-9.]".toRegex(), "").toFloat()
         } catch (e: NumberFormatException) {
-            0f // Return 0 if parsing fails
+            0f
         }
     }
 
-    /**
-     * Original calculateBill function with improved decimal handling
-     */
     private fun calculateBill(units: Float): Float {
         if (units <= 0) return 0f
 
@@ -52,13 +42,12 @@ object BillCalculator {
         for (slab in tariffSlabs) {
             if (remainingUnits <= 0) break
 
-            // Calculate units in this slab range
             val slabUnits = when {
                 remainingUnits <= slab.fromUnit -> 0f
                 else -> minOf(
-                    (slab.toUnit - slab.fromUnit + 1).toFloat(), // Slab range
-                    slab.maxUnits.toFloat(),                      // Max units allowed
-                    remainingUnits                                // Remaining units
+                    (slab.toUnit - slab.fromUnit + 1).toFloat(),
+                    slab.maxUnits.toFloat(),
+                    remainingUnits
                 )
             }
 
@@ -71,10 +60,6 @@ object BillCalculator {
         return totalAmount
     }
 
-    /**
-     * Enhanced version of your original calculateSplit function
-     * Now properly uses the totalBillAmount parameter
-     */
     fun calculateSplit(
         totalBillAmount: Float,
         totalUnits: Float,
@@ -103,7 +88,6 @@ object BillCalculator {
         )
     }
 
-    // Data classes for better structured returns
     data class MemberBill(
         val individualReading: Float,
         val amountToPay: Float
@@ -116,22 +100,18 @@ object BillCalculator {
         val totalBillAmount: Float,
         val totalUnits: Float
     ) {
-        /**
-         * Formats the complete calculation breakdown
-         * (New method to show calculation details)
-         */
         fun getFormattedBreakdown(): String {
             return buildString {
                 appendLine("=== Bill Calculation Breakdown ===")
                 appendLine("Total Bill Amount: ₹${"%.2f".format(totalBillAmount)}")
-                appendLine("Total Units: $totalUnits kWh")
+                appendLine("Total Units: ${"%.2f".format(totalUnits)} kWh")
                 appendLine("Common Consumption: ${"%.2f".format(commonConsumption)} kWh")
                 appendLine("Common Share (per member): ${"%.2f".format(commonSharePerMember)} kWh")
                 appendLine()
                 appendLine("--- Individual Shares ---")
                 individualBills.forEachIndexed { index, bill ->
                     appendLine("Member ${index + 1}:")
-                    appendLine("  Individual Reading: ${bill.individualReading} kWh")
+                    appendLine("  Individual Reading: ${"%.2f".format(bill.individualReading)} kWh")
                     appendLine("  Amount To Pay: ₹${"%.2f".format(bill.amountToPay)}")
                 }
             }

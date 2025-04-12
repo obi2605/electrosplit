@@ -19,7 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.electrosplitapp.BillDetailsResponse
+import com.example.electrosplitapp.BillResponse
 import com.example.electrosplitapp.CameraScreen
 import com.example.electrosplitapp.VisionService
 import com.example.electrosplitapp.utils.BillCalculator
@@ -43,7 +43,6 @@ fun HomeScreen(
     var showBreakdownDialog by remember { mutableStateOf(false) }
     var calculatedBill by remember { mutableStateOf<BillCalculator.SplitResult?>(null) }
 
-    // Maintain all original gallery launcher code
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
@@ -56,13 +55,14 @@ fun HomeScreen(
         }
     )
 
-    // Maintain all original state collection
-    val isLoading by viewModel.isLoading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
-    val billDetails by viewModel.billDetails.collectAsState()
+    // Updated state collection to use billResponse instead of billDetails
+    val billResponse by viewModel.billResponse.collectAsState(initial = null)
+    val isLoading by viewModel.isLoading.collectAsState(initial = false)
+    val errorMessage by viewModel.errorMessage.collectAsState(initial = null)
     val accountName by viewModel.accountName.collectAsState(initial = null)
+    val consumerNumber by viewModel.consumerNumber.collectAsState(initial = null)
+    val operator by viewModel.operatorName.collectAsState(initial = null)
 
-    // Maintain original Scaffold structure
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -85,12 +85,14 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Original AccountInfoCard with all features
+            // Updated AccountInfoCard to use billResponse
             AccountInfoCard(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
-                billDetails = billDetails,
-                accountName = accountName
+                billResponse = billResponse,
+                accountName = accountName,
+                consumerNumber = consumerNumber,
+                operator = operator
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -102,7 +104,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Original ReadingOptions with all buttons
             ReadingOptions(
                 onScanPressed = { showCamera = true },
                 onGalleryPressed = { galleryLauncher.launch("image/*") },
@@ -119,7 +120,6 @@ fun HomeScreen(
         }
     }
 
-    // Original CameraScreen implementation
     if (showCamera) {
         CameraScreen(
             visionService = visionService,
@@ -132,12 +132,12 @@ fun HomeScreen(
         )
     }
 
-    // Enhanced ManualReadingDialog
     if (showManualDialog) {
         ManualReadingDialog(
             initialValue = manualReading,
-            billDetails = billDetails,
-            groupSize = 1, // Default to 1 (no group)
+            totalUnits = billResponse?.totalUnits?.toFloat() ?: 0f,
+            totalAmount = billResponse?.totalAmount?.toFloat() ?: 0f,
+            groupSize = 1,
             onDismiss = { showManualDialog = false },
             onSubmit = { reading, result ->
                 manualReading = reading
@@ -147,7 +147,6 @@ fun HomeScreen(
         )
     }
 
-    // New BreakdownDialog
     if (showBreakdownDialog && calculatedBill != null) {
         BreakdownDialog(
             breakdown = calculatedBill!!.getFormattedBreakdown(),
@@ -156,15 +155,19 @@ fun HomeScreen(
     }
 }
 
-// Original AccountInfoCard implementation
 @Composable
 private fun AccountInfoCard(
     isLoading: Boolean,
     errorMessage: String?,
-    billDetails: BillDetailsResponse?,
-    accountName: String?
+    billResponse: BillResponse?,
+    accountName: String?,
+    consumerNumber: String?,
+    operator: String?
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = accountName ?: "My Account",
@@ -173,45 +176,59 @@ private fun AccountInfoCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            Text(
+                text = "Consumer Number: ${consumerNumber ?: "Not available"}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Text(
+                text = "Operator: ${operator ?: "Not available"}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             when {
                 isLoading -> {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Loading bill data...")
                     }
                 }
-                !errorMessage.isNullOrEmpty() -> {
+
+                errorMessage != null -> {
                     Text(
-                        text = errorMessage,
+                        text = "Error: ${errorMessage.takeIf { it.isNotBlank() } ?: "Unknown error"}",
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
-                billDetails != null -> {
+
+                billResponse != null -> {
                     Column {
                         Text(
-                            text = "Total Units: ${billDetails.totalUnits} kWh",
+                            text = "Total Units: ${billResponse.totalUnits} kWh",
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            text = "Total Amount: ₹${"%.2f".format(billDetails.totalAmount)}",
+                            text = "Total Amount: ₹${"%.2f".format(billResponse.totalAmount)}",
                             style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "Billing Period: ${billDetails.billingPeriod}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            text = "Due Date: ${billDetails.dueDate}",
-                            style = MaterialTheme.typography.bodySmall
                         )
                     }
+                }
+
+                else -> {
+                    Text(
+                        "No bill data available",
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
     }
 }
 
-// Original ReadingOptions implementation
 @Composable
 private fun ReadingOptions(
     onScanPressed: () -> Unit,
@@ -252,7 +269,6 @@ private fun ReadingOptions(
     }
 }
 
-// Enhanced CalculationResultCard
 @Composable
 private fun CalculationResultCard(amount: Float, onViewBreakdown: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -276,11 +292,11 @@ private fun CalculationResultCard(amount: Float, onViewBreakdown: () -> Unit) {
     }
 }
 
-// Enhanced ManualReadingDialog
 @Composable
 private fun ManualReadingDialog(
     initialValue: String,
-    billDetails: BillDetailsResponse?,
+    totalUnits: Float,
+    totalAmount: Float,
     groupSize: Int,
     onDismiss: () -> Unit,
     onSubmit: (String, BillCalculator.SplitResult) -> Unit
@@ -290,12 +306,12 @@ private fun ManualReadingDialog(
         reading.replace("[^0-9.]".toRegex(), "").takeIf { it.isNotEmpty() } ?: "0"
     }
 
-    val splitResult = remember(cleanReading, billDetails, groupSize) {
-        if (cleanReading.isNotEmpty() && billDetails != null) {
+    val splitResult = remember(cleanReading, totalUnits, totalAmount, groupSize) {
+        if (cleanReading.isNotEmpty()) {
             val userReading = BillCalculator.parseReading(cleanReading)
             BillCalculator.calculateSplit(
-                totalBillAmount = billDetails.totalAmount,
-                totalUnits = billDetails.totalUnits,
+                totalBillAmount = totalAmount,
+                totalUnits = totalUnits,
                 individualReadings = listOf(userReading),
                 groupSize = groupSize
             )
@@ -310,11 +326,11 @@ private fun ManualReadingDialog(
                 OutlinedTextField(
                     value = reading,
                     onValueChange = { reading = it },
-                    label = { Text("Current Reading (kWh)") },
+                    label = { Text("Current Reading") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal
                     ),
-                    suffix = { Text("kWh") },
+                    trailingIcon = { Text("kWh") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -364,7 +380,6 @@ private fun ManualReadingDialog(
     )
 }
 
-// New BreakdownDialog
 @Composable
 private fun BreakdownDialog(breakdown: String, onDismiss: () -> Unit) {
     AlertDialog(
@@ -381,7 +396,6 @@ private fun BreakdownDialog(breakdown: String, onDismiss: () -> Unit) {
     )
 }
 
-// Original processImageFromUri implementation
 private fun processImageFromUri(
     context: Context,
     visionService: VisionService,

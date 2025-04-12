@@ -8,6 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.example.electrosplitapp.data.AuthManager
 import com.example.electrosplitapp.ui.theme.ElectrosplitAppTheme
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -43,13 +45,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun createBillService(): BillService {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(logging)
+            .build()
+
         return Retrofit.Builder()
-            .baseUrl("http://192.168.1.4:8080/") // Replace with your actual base URL
+            .baseUrl("http://192.168.1.2:8080/") // Verify this IP!
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(BillService::class.java)
     }
-
     override fun onDestroy() {
         visionService.shutdown()
         super.onDestroy()
