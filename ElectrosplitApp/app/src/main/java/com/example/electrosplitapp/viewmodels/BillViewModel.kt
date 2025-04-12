@@ -52,12 +52,23 @@ class BillViewModel(
                 val consumerNumber = consumerNumber.value
                 val operator = operatorName.value
                 if (consumerNumber != null && operator != null) {
-                    val response = billService.fetchBillDetails(
+                    val response = billService.fetchBill(
                         BillRequest(consumerNumber, operator)
                     ).awaitResponse()
 
                     if (response.isSuccessful) {
-                        _billDetails.value = response.body()
+                        val bill = response.body()
+                        if (bill != null && bill.success) {
+                            _billDetails.value = BillDetailsResponse(
+                                success = true,
+                                totalUnits = bill.totalUnits.toFloat(),
+                                totalAmount = bill.totalAmount.toFloat(),
+                                dueDate = "N/A", // You can add these to your BillResponse
+                                billingPeriod = "N/A"
+                            )
+                        } else {
+                            _errorMessage.value = "Failed to fetch bill details"
+                        }
                     } else {
                         _errorMessage.value = "Failed to fetch bill details"
                     }

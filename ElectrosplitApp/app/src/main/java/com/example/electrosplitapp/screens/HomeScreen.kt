@@ -40,13 +40,15 @@ fun HomeScreen(
     var showCamera by remember { mutableStateOf(false) }
     var manualReading by remember { mutableStateOf("") }
     var showManualDialog by remember { mutableStateOf(false) }
-    var calculatedBill by remember { mutableStateOf<Float?>(null) }
+    var showBreakdownDialog by remember { mutableStateOf(false) }
+    var calculatedBill by remember { mutableStateOf<BillCalculator.SplitResult?>(null) }
 
+    // Maintain all original gallery launcher code
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
             uri?.let {
-                processImageFromUri(context, visionService, it) { reading: String ->
+                processImageFromUri(context, visionService, it) { reading ->
                     manualReading = reading
                     showManualDialog = true
                 }
@@ -54,11 +56,13 @@ fun HomeScreen(
         }
     )
 
-    // Collect StateFlow values
+    // Maintain all original state collection
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val billDetails by viewModel.billDetails.collectAsState()
+    val accountName by viewModel.accountName.collectAsState(initial = null)
 
+    // Maintain original Scaffold structure
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -81,11 +85,12 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            // Original AccountInfoCard with all features
             AccountInfoCard(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 billDetails = billDetails,
-                accountName = viewModel.accountName.collectAsState().value
+                accountName = accountName
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -97,19 +102,24 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Original ReadingOptions with all buttons
             ReadingOptions(
                 onScanPressed = { showCamera = true },
                 onGalleryPressed = { galleryLauncher.launch("image/*") },
                 onManualPressed = { showManualDialog = true }
             )
 
-            calculatedBill?.let { amount ->
+            calculatedBill?.let { splitResult ->
                 Spacer(modifier = Modifier.height(24.dp))
-                CalculationResultCard(amount = amount)
+                CalculationResultCard(
+                    amount = splitResult.individualBills.first().amountToPay,
+                    onViewBreakdown = { showBreakdownDialog = true }
+                )
             }
         }
     }
 
+    // Original CameraScreen implementation
     if (showCamera) {
         CameraScreen(
             visionService = visionService,
@@ -122,18 +132,31 @@ fun HomeScreen(
         )
     }
 
+    // Enhanced ManualReadingDialog
     if (showManualDialog) {
         ManualReadingDialog(
             initialValue = manualReading,
+            billDetails = billDetails,
+            groupSize = 1, // Default to 1 (no group)
             onDismiss = { showManualDialog = false },
-            onSubmit = { reading ->
-                calculatedBill = calculateBillShare(reading)
+            onSubmit = { reading, result ->
+                manualReading = reading
+                calculatedBill = result
                 showManualDialog = false
             }
         )
     }
+
+    // New BreakdownDialog
+    if (showBreakdownDialog && calculatedBill != null) {
+        BreakdownDialog(
+            breakdown = calculatedBill!!.getFormattedBreakdown(),
+            onDismiss = { showBreakdownDialog = false }
+        )
+    }
 }
 
+// Original AccountInfoCard implementation
 @Composable
 private fun AccountInfoCard(
     isLoading: Boolean,
@@ -188,6 +211,7 @@ private fun AccountInfoCard(
     }
 }
 
+// Original ReadingOptions implementation
 @Composable
 private fun ReadingOptions(
     onScanPressed: () -> Unit,
@@ -228,8 +252,9 @@ private fun ReadingOptions(
     }
 }
 
+// Enhanced CalculationResultCard
 @Composable
-private fun CalculationResultCard(amount: Float) {
+private fun CalculationResultCard(amount: Float, onViewBreakdown: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -240,17 +265,42 @@ private fun CalculationResultCard(amount: Float) {
                 text = "₹${"%.2f".format(amount)}",
                 style = MaterialTheme.typography.headlineMedium
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = onViewBreakdown,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Show Calculation Details")
+            }
         }
     }
 }
 
+// Enhanced ManualReadingDialog
 @Composable
 private fun ManualReadingDialog(
     initialValue: String,
+    billDetails: BillDetailsResponse?,
+    groupSize: Int,
     onDismiss: () -> Unit,
-    onSubmit: (String) -> Unit
+    onSubmit: (String, BillCalculator.SplitResult) -> Unit
 ) {
     var reading by remember { mutableStateOf(initialValue) }
+    val cleanReading = remember(reading) {
+        reading.replace("[^0-9.]".toRegex(), "").takeIf { it.isNotEmpty() } ?: "0"
+    }
+
+    val splitResult = remember(cleanReading, billDetails, groupSize) {
+        if (cleanReading.isNotEmpty() && billDetails != null) {
+            val userReading = BillCalculator.parseReading(cleanReading)
+            BillCalculator.calculateSplit(
+                totalBillAmount = billDetails.totalAmount,
+                totalUnits = billDetails.totalUnits,
+                individualReadings = listOf(userReading),
+                groupSize = groupSize
+            )
+        } else null
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -259,9 +309,7 @@ private fun ManualReadingDialog(
             Column {
                 OutlinedTextField(
                     value = reading,
-                    onValueChange = {
-                        reading = it.filter { c -> c.isDigit() || c == '.' }
-                    },
+                    onValueChange = { reading = it },
                     label = { Text("Current Reading (kWh)") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal
@@ -270,20 +318,42 @@ private fun ManualReadingDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (reading.isNotEmpty()) {
+                if (cleanReading.isNotEmpty()) {
                     Text(
-                        text = "Reading: ${reading}kWh",
+                        text = "Reading: ${cleanReading.toFloat()} kWh",
                         modifier = Modifier.padding(top = 8.dp)
                     )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                splitResult?.let { result ->
+                    val yourShare = result.individualBills.first().amountToPay
+                    Text(
+                        text = "Your Share: ₹${"%.2f".format(yourShare)}",
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    if (groupSize > 1) {
+                        Text(
+                            text = "Includes ${"%.2f".format(result.commonSharePerMember)} kWh common usage",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSubmit(reading) },
-                enabled = reading.isNotBlank()
+                onClick = {
+                    if (splitResult != null) {
+                        onSubmit(cleanReading, splitResult)
+                    }
+                },
+                enabled = splitResult != null
             ) {
-                Text("Calculate")
+                Text("Confirm")
             }
         },
         dismissButton = {
@@ -294,15 +364,24 @@ private fun ManualReadingDialog(
     )
 }
 
-private fun calculateBillShare(reading: String): Float {
-    return try {
-        val units = reading.toFloat()
-        BillCalculator.calculateBill(units)
-    } catch (e: NumberFormatException) {
-        0f
-    }
+// New BreakdownDialog
+@Composable
+private fun BreakdownDialog(breakdown: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Calculation Breakdown") },
+        text = {
+            Text(breakdown)
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
 }
 
+// Original processImageFromUri implementation
 private fun processImageFromUri(
     context: Context,
     visionService: VisionService,
