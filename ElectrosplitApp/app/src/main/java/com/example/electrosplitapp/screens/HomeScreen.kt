@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.electrosplitapp.BillResponse
 import com.example.electrosplitapp.CameraScreen
@@ -69,7 +70,7 @@ fun HomeScreen(
                 title = { Text("Electrosplit") },
                 actions = {
                     IconButton(onClick = {
-                        CoroutineScope(Dispatchers.IO).launch {
+                        viewModel.viewModelScope.launch {
                             viewModel.logout()
                             onLogout()
                         }
