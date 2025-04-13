@@ -12,6 +12,7 @@ import com.example.electrosplitapp.ui.theme.ElectrosplitAppTheme
 fun MainApp(
     visionService: VisionService,
     billService: BillService,
+    authService: AuthService,  // Added this parameter
     authManager: AuthManager
 ) {
     ElectrosplitAppTheme {
@@ -20,6 +21,7 @@ fun MainApp(
                 AppNavigation(
                     visionService = visionService,
                     billService = billService,
+                    authService = authService,  // Passing it down
                     authManager = authManager
                 )
             }

@@ -1,6 +1,6 @@
 package com.electrosplit
 
-import io.ktor.server.application.*  // Correct import for Application
+import io.ktor.server.application.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.plugins.contentnegotiation.*
 import kotlinx.serialization.Serializable
@@ -10,6 +10,25 @@ data class BillRequest(val consumerNumber: String, val operator: String)
 
 @Serializable
 data class BillResponse(val totalUnits: Int, val totalAmount: Double)
+
+@Serializable
+data class UserRequest(
+    val phoneNumber: String,
+    val password: String,
+    val name: String? = null,
+    val consumerNumber: String,
+    val operator: String
+)
+
+@Serializable
+data class AuthResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val userId: Int? = null,
+    val name: String? = null,
+    val consumerNumber: String? = null,
+    val operator: String? = null
+)
 
 fun Application.configureSerialization() {
     install(ContentNegotiation) {

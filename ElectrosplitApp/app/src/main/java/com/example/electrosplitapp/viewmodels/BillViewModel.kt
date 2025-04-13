@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-
 class BillViewModel(
     private val billService: BillService,
     private val authManager: AuthManager
@@ -33,7 +32,7 @@ class BillViewModel(
     // Auth data flows
     val consumerNumber = authManager.consumerNumber
     val operatorName = authManager.operatorName
-    val accountName = authManager.accountName
+    val userName = authManager.userName  // Changed from accountName to userName
 
     init {
         Log.d("BillViewModel", "ViewModel initialized")
@@ -76,7 +75,9 @@ class BillViewModel(
                 _isLoading.value = false
             }
         }
-    }    suspend fun logout() {
+    }
+
+    suspend fun logout() {
         authManager.logout()
     }
 }

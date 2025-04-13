@@ -15,17 +15,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun LoginScreen(
+fun RegisterScreen(
     authService: AuthService,
     authManager: AuthManager,
-    onLoginSuccess: () -> Unit,
-    onRegisterClick: () -> Unit
+    onRegisterSuccess: () -> Unit,
+    onBack: () -> Unit
 ) {
     var phoneNumber by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var consumerNumber by remember { mutableStateOf("") }
+    var operator by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
+
 
     Column(
         modifier = Modifier
@@ -34,7 +38,7 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Welcome to Electrosplit",
+            text = "Create Account",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
@@ -57,6 +61,33 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Full Name") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = consumerNumber,
+            onValueChange = { consumerNumber = it },
+            label = { Text("Consumer Number") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = operator,
+            onValueChange = { operator = it },
+            label = { Text("Operator") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
         if (errorMessage.isNotEmpty()) {
             Text(
                 text = errorMessage,
@@ -69,46 +100,45 @@ fun LoginScreen(
 
         Button(
             onClick = {
-                if (phoneNumber.isBlank() || password.isBlank()) {
-                    errorMessage = "Please enter phone number and password"
+                if (phoneNumber.isBlank() || password.isBlank() ||
+                    consumerNumber.isBlank() || operator.isBlank()) {
+                    errorMessage = "Please fill all required fields"
                     return@Button
                 }
 
                 isLoading = true
-                errorMessage = ""
-
-                coroutineScope.launch(Dispatchers.IO) {
+                coroutineScope.launch(Dispatchers.IO) {  // <-- Perform in background
                     try {
-                        val response = authService.login(
+                        val response = authService.register(
                             UserRequest(
                                 phoneNumber = phoneNumber,
                                 password = password,
-                                consumerNumber = "",
-                                operator = ""
+                                name = name,
+                                consumerNumber = consumerNumber,
+                                operator = operator
                             )
                         ).execute()
 
-                        withContext(Dispatchers.Main) {
+                        withContext(Dispatchers.Main) {  // <-- Switch back to UI thread
                             if (response.isSuccessful) {
                                 response.body()?.let { authResponse ->
                                     if (authResponse.success) {
-                                        val userName = authResponse.name ?: ""
                                         authManager.saveLoginDetails(
                                             userId = authResponse.userId.toString(),
                                             phoneNumber = phoneNumber,
-                                            name = userName, // Will be updated from user data
-                                            consumerNumber = authResponse.consumerNumber ?: "",
-                                            operator = authResponse.operator ?: ""
+                                            name = name,
+                                            consumerNumber = consumerNumber,
+                                            operator = operator
                                         )
-                                        onLoginSuccess()
+                                        onRegisterSuccess()
                                     } else {
-                                        errorMessage = authResponse.message ?: "Login failed"
+                                        errorMessage = authResponse.message ?: "Registration failed"
                                     }
                                 } ?: run {
                                     errorMessage = "Unknown error occurred"
                                 }
                             } else {
-                                errorMessage = "Login failed: ${response.code()}"
+                                errorMessage = "Registration failed: ${response.code()}"
                             }
                             isLoading = false
                         }
@@ -116,7 +146,7 @@ fun LoginScreen(
                         withContext(Dispatchers.Main) {
                             errorMessage = "Network error: ${e.message ?: "Unknown error"}"
                             isLoading = false
-                            Log.e("LoginScreen", "Login failed", e)
+                            Log.e("RegisterScreen", "Registration failed", e)
                         }
                     }
                 }
@@ -130,17 +160,17 @@ fun LoginScreen(
                     modifier = Modifier.size(24.dp)
                 )
             } else {
-                Text("Login")
+                Text("Register")
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         TextButton(
-            onClick = onRegisterClick,
+            onClick = onBack,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
-            Text("Don't have an account? Register")
+            Text("Already have an account? Login")
         }
     }
 }

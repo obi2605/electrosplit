@@ -60,7 +60,7 @@ fun HomeScreen(
     val billResponse by viewModel.billResponse.collectAsState(initial = null)
     val isLoading by viewModel.isLoading.collectAsState(initial = false)
     val errorMessage by viewModel.errorMessage.collectAsState(initial = null)
-    val accountName by viewModel.accountName.collectAsState(initial = null)
+    val userName by viewModel.userName.collectAsState(initial = null)
     val consumerNumber by viewModel.consumerNumber.collectAsState(initial = null)
     val operator by viewModel.operatorName.collectAsState(initial = null)
 
@@ -90,7 +90,7 @@ fun HomeScreen(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 billResponse = billResponse,
-                accountName = accountName,
+                userName = userName,
                 consumerNumber = consumerNumber,
                 operator = operator
             )
@@ -160,7 +160,7 @@ private fun AccountInfoCard(
     isLoading: Boolean,
     errorMessage: String?,
     billResponse: BillResponse?,
-    accountName: String?,
+    userName: String?,
     consumerNumber: String?,
     operator: String?
 ) {
@@ -170,7 +170,7 @@ private fun AccountInfoCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = accountName ?: "My Account",
+                text = userName ?: "My Account",
                 style = MaterialTheme.typography.titleLarge
             )
 

@@ -16,6 +16,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 class MainActivity : ComponentActivity() {
     private lateinit var visionService: VisionService
     private lateinit var billService: BillService
+    private lateinit var authService: AuthService
     private lateinit var authManager: AuthManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
         // Initialize services
         visionService = VisionService(applicationContext)
         billService = createBillService()
+        authService = createAuthService()
         authManager = AuthManager(applicationContext)
 
         setContent {
@@ -38,6 +40,7 @@ class MainActivity : ComponentActivity() {
                 MainApp(
                     visionService = visionService,
                     billService = billService,
+                    authService = authService,
                     authManager = authManager
                 )
             }
@@ -45,6 +48,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun createBillService(): BillService {
+        return createRetrofit().create(BillService::class.java)
+    }
+
+    private fun createAuthService(): AuthService {
+        return createRetrofit().create(AuthService::class.java)
+    }
+
+    private fun createRetrofit(): Retrofit {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
@@ -58,8 +69,8 @@ class MainActivity : ComponentActivity() {
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(BillService::class.java)
     }
+
     override fun onDestroy() {
         visionService.shutdown()
         super.onDestroy()
