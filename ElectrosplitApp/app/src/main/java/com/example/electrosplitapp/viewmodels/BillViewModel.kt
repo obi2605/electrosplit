@@ -28,19 +28,12 @@ class BillViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-
-    // ✅ Call this manually with group-sourced values
     fun fetchBill(consumerNumber: String, operatorName: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             try {
-                if (consumerNumber.isBlank() || operatorName.isBlank()) {
-                    _errorMessage.value = "Invalid bill information"
-                    return@launch
-                }
-
                 val request = BillRequest(consumerNumber, operatorName)
                 val response = withContext(Dispatchers.IO) {
                     billService.fetchBill(request).execute()

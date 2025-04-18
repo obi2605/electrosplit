@@ -363,6 +363,8 @@ private fun fetchBillFromDB(consumerNumber: String, operator: String): BillRespo
         SELECT total_units, total_amount 
         FROM bills 
         WHERE consumer_number = ? AND operator = ?
+        ORDER BY bill_date DESC
+        LIMIT 1
     """.trimIndent()
 
     return createDataSource().connection.use { conn ->
@@ -379,6 +381,7 @@ private fun fetchBillFromDB(consumerNumber: String, operator: String): BillRespo
         }
     }
 }
+
 
 private fun userExists(phoneNumber: String): Boolean {
     val query = "SELECT 1 FROM users WHERE phone_number = ?"

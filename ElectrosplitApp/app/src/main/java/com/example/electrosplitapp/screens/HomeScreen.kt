@@ -161,7 +161,19 @@ fun HomeScreen(
                     val swipeState = rememberSwipeRefreshState(isRefreshing = groupLoading)
                     SwipeRefresh(
                         state = swipeState,
-                        onRefresh = { currentGroupId.toIntOrNull()?.let { groupViewModel.fetchGroupDetails(it) } },
+                        onRefresh = {
+                            currentGroupId.toIntOrNull()?.let { groupId ->
+                                groupViewModel.fetchGroupDetails(groupId)
+
+                                val consumer = groupViewModel.groupDetails.value?.consumerNumber
+                                val operator = groupViewModel.groupDetails.value?.operator
+
+                                if (!consumer.isNullOrBlank() && !operator.isNullOrBlank()) {
+                                    billViewModel.fetchBill(consumer, operator)
+                                }
+                            }
+                        }
+                        ,
                         modifier = Modifier.fillMaxSize()
                     ) {
                         LazyColumn(
