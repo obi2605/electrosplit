@@ -24,12 +24,9 @@ fun RegisterScreen(
     var phoneNumber by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var consumerNumber by remember { mutableStateOf("") }
-    var operator by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
-
 
     Column(
         modifier = Modifier
@@ -70,24 +67,6 @@ fun RegisterScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = consumerNumber,
-            onValueChange = { consumerNumber = it },
-            label = { Text("Consumer Number") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = operator,
-            onValueChange = { operator = it },
-            label = { Text("Operator") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
         if (errorMessage.isNotEmpty()) {
             Text(
                 text = errorMessage,
@@ -100,35 +79,30 @@ fun RegisterScreen(
 
         Button(
             onClick = {
-                if (phoneNumber.isBlank() || password.isBlank() ||
-                    consumerNumber.isBlank() || operator.isBlank()) {
-                    errorMessage = "Please fill all required fields"
+                if (phoneNumber.isBlank() || password.isBlank()) {
+                    errorMessage = "Phone and password are required"
                     return@Button
                 }
 
                 isLoading = true
-                coroutineScope.launch(Dispatchers.IO) {  // <-- Perform in background
+                coroutineScope.launch(Dispatchers.IO) {
                     try {
                         val response = authService.register(
                             UserRequest(
                                 phoneNumber = phoneNumber,
                                 password = password,
-                                name = name,
-                                consumerNumber = consumerNumber,
-                                operator = operator
+                                name = name
                             )
                         ).execute()
 
-                        withContext(Dispatchers.Main) {  // <-- Switch back to UI thread
+                        withContext(Dispatchers.Main) {
                             if (response.isSuccessful) {
                                 response.body()?.let { authResponse ->
                                     if (authResponse.success) {
                                         authManager.saveLoginDetails(
                                             userId = authResponse.userId.toString(),
                                             phoneNumber = phoneNumber,
-                                            name = name,
-                                            consumerNumber = consumerNumber,
-                                            operator = operator
+                                            name = name
                                         )
                                         onRegisterSuccess()
                                     } else {

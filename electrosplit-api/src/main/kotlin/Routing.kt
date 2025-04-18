@@ -14,38 +14,24 @@ fun Application.configureRouting() {
         post("/register") {
             val request = call.receive<UserRequest>()
 
-            // Validate input
-            if (request.phoneNumber.isBlank() || request.password.isBlank() ||
-                request.consumerNumber.isBlank() || request.operator.isBlank()) {
+            if (request.phoneNumber.isBlank() || request.password.isBlank()) {
                 call.respond(HttpStatusCode.BadRequest,
-                    AuthResponse(false, "All fields are required"))
+                    AuthResponse(false, "Phone number and password are required"))
                 return@post
             }
 
-            // Check if phone number exists
             if (userExists(request.phoneNumber)) {
                 call.respond(HttpStatusCode.Conflict,
                     AuthResponse(false, "Phone number already registered"))
                 return@post
             }
 
-            // Verify bill exists
-            if (!billExists(request.consumerNumber, request.operator)) {
-                call.respond(HttpStatusCode.BadRequest,
-                    AuthResponse(false, "No bill found for provided consumer details"))
-                return@post
-            }
-
-            // Hash password
             val passwordHash = hashPassword(request.password)
 
-            // Create user
             val userId = createUser(
                 phoneNumber = request.phoneNumber,
                 passwordHash = passwordHash,
-                name = request.name ?: "", // Handle optional name
-                consumerNumber = request.consumerNumber,
-                operator = request.operator
+                name = request.name ?: ""
             )
 
             call.respond(HttpStatusCode.Created,
@@ -53,9 +39,7 @@ fun Application.configureRouting() {
                     success = true,
                     message = "Registration successful",
                     userId = userId,
-                    name = request.name, // Return the name
-                    consumerNumber = request.consumerNumber,
-                    operator = request.operator
+                    name = request.name
                 )
             )
         }
@@ -69,7 +53,6 @@ fun Application.configureRouting() {
                 return@post
             }
 
-            // Get user from database
             val user = getUserByPhone(request.phoneNumber)
             if (user == null) {
                 call.respond(HttpStatusCode.NotFound,
@@ -77,22 +60,18 @@ fun Application.configureRouting() {
                 return@post
             }
 
-            // Verify password
             if (!verifyPassword(request.password, user["password_hash"] as String)) {
                 call.respond(HttpStatusCode.Unauthorized,
                     AuthResponse(false, "Invalid credentials"))
                 return@post
             }
 
-            // Successful login
             call.respond(HttpStatusCode.OK,
                 AuthResponse(
                     success = true,
                     message = "Login successful",
                     userId = user["id"] as Int,
-                    name = user["name"] as String, // Return stored name
-                    consumerNumber = user["consumer_number"] as String,
-                    operator = user["operator"] as String
+                    name = user["name"] as String
                 )
             )
         }
@@ -276,6 +255,35 @@ fun Application.configureRouting() {
                 AuthResponse(true, "Group deleted successfully"))
         }
 
+        post("/updateGroupBill/{groupId}") {
+            val groupId = call.parameters["groupId"]?.toIntOrNull()
+            if (groupId == null) {
+                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Invalid group ID"))
+                return@post
+            }
+
+            val request = call.receive<BillRequest>()
+
+            // Verify group exists
+            val group = getGroupById(groupId)
+            if (group == null) {
+                call.respond(HttpStatusCode.NotFound, AuthResponse(false, "Group not found"))
+                return@post
+            }
+
+            // Verify bill exists
+            if (!billExists(request.consumerNumber, request.operator)) {
+                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Bill not found for provided details"))
+                return@post
+            }
+
+            // Update group bill info
+            updateGroupBill(groupId, request.consumerNumber, request.operator)
+
+            call.respond(HttpStatusCode.OK, AuthResponse(true, "Bill updated for group"))
+        }
+
+
 // Submit meter reading
         post("/submitReading") {
             val request = call.receive<SubmitReadingRequest>()
@@ -400,14 +408,12 @@ private fun billExists(consumerNumber: String, operator: String): Boolean {
 private fun createUser(
     phoneNumber: String,
     passwordHash: String,
-    name: String,
-    consumerNumber: String,
-    operator: String
+    name: String
 ): Int {
     val query = """
         INSERT INTO users 
-        (phone_number, password_hash, name, consumer_number, operator)
-        VALUES (?, ?, ?, ?, ?)
+        (phone_number, password_hash, name)
+        VALUES (?, ?, ?)
         RETURNING id
     """.trimIndent()
 
@@ -415,9 +421,7 @@ private fun createUser(
         conn.prepareStatement(query).use { stmt ->
             stmt.setString(1, phoneNumber)
             stmt.setString(2, passwordHash)
-            stmt.setString(3, name)  // Store the name
-            stmt.setString(4, consumerNumber)
-            stmt.setString(5, operator)
+            stmt.setString(3, name)
             stmt.executeQuery().use { rs ->
                 if (rs.next()) {
                     rs.getInt("id")
@@ -428,6 +432,7 @@ private fun createUser(
         }
     }
 }
+
 
 private fun generateRandomCode(length: Int): String {
     val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -627,6 +632,8 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
         creatorName = creatorName,
         creatorPhone = group["creator_phone"] as String,
         billDetails = bill,
+        consumerNumber = group["bill_consumer_number"] as String,
+        operator = group["bill_operator"] as String,
         members = members,
         pieChartData = pieChartData
     )
@@ -713,7 +720,7 @@ private fun updateMemberReading(groupId: Int, memberPhone: String, reading: Floa
 
 private fun getUserByPhone(phoneNumber: String): Map<String, Any>? {
     val query = """
-        SELECT id, password_hash, name, consumer_number, operator
+        SELECT id, password_hash, name
         FROM users
         WHERE phone_number = ?
     """.trimIndent()
@@ -726,9 +733,7 @@ private fun getUserByPhone(phoneNumber: String): Map<String, Any>? {
                     mapOf(
                         "id" to rs.getInt("id"),
                         "password_hash" to rs.getString("password_hash"),
-                        "name" to rs.getString("name"),  // Include name in response
-                        "consumer_number" to rs.getString("consumer_number"),
-                        "operator" to rs.getString("operator")
+                        "name" to rs.getString("name")
                     )
                 } else {
                     null
@@ -737,6 +742,7 @@ private fun getUserByPhone(phoneNumber: String): Map<String, Any>? {
         }
     }
 }
+
 
 private fun hashPassword(password: String): String {
     val bytes = MessageDigest.getInstance("SHA-256").digest(password.toByteArray())
@@ -758,6 +764,24 @@ private fun findGroupIdByMemberPhone(phone: String): Int? {
         }
     }
 }
+
+private fun updateGroupBill(groupId: Int, consumerNumber: String, operator: String) {
+    val query = """
+        UPDATE groups 
+        SET bill_consumer_number = ?, bill_operator = ?
+        WHERE group_id = ?
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, consumerNumber)
+            stmt.setString(2, operator)
+            stmt.setInt(3, groupId)
+            stmt.executeUpdate()
+        }
+    }
+}
+
 
 
 

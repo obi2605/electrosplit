@@ -102,8 +102,19 @@ fun HomeScreen(
     }
 
     LaunchedEffect(currentGroupId) {
-        currentGroupId?.toIntOrNull()?.let { groupViewModel.fetchGroupDetails(it) }
+        currentGroupId?.toIntOrNull()?.let { groupId ->
+            groupViewModel.fetchGroupDetails(groupId)
+        }
     }
+    LaunchedEffect(groupDetails?.consumerNumber, groupDetails?.operator) {
+        val consumer = groupDetails?.consumerNumber
+        val operator = groupDetails?.operator
+        if (!consumer.isNullOrBlank() && !operator.isNullOrBlank()) {
+            billViewModel.fetchBill(consumer, operator)
+        }
+    }
+
+
 
     if (!groupRestored) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -275,7 +286,14 @@ fun HomeScreen(
                         groupQr = groupViewModel.authManager.currentGroupQr.collectAsState(initial = "").value ?: "",
                         isCreator = isGroupCreator,
                         onEditGroup = {
-                            groupViewModel.updateGroupName(it) { showDrawer = false }
+                            groupViewModel.updateGroupName(it) {
+                                showDrawer = false
+                            }
+                        },
+                        onEditBill = { newConsumerNumber, newOperator ->
+                            groupViewModel.updateGroupBill(newConsumerNumber, newOperator) {
+                                showDrawer = false
+                            }
                         },
                         onLeaveGroup = {
                             groupViewModel.leaveGroup { showDrawer = false }
@@ -283,13 +301,13 @@ fun HomeScreen(
                         onDeleteGroup = {
                             groupViewModel.deleteGroup { showDrawer = false }
                         },
-                        onDismiss = { showDrawer = false },
                         onLogout = {
                             billViewModel.viewModelScope.launch {
                                 billViewModel.logout()
                                 onLogout()
                             }
-                        }
+                        },
+                        onDismiss = { showDrawer = false }
                     )
                 }
             }
@@ -373,7 +391,11 @@ fun HomeScreen(
     if (showCreateGroupDialog) {
         CreateGroupDialog(
             onDismiss = { showCreateGroupDialog = false },
-            onCreate = { name -> groupViewModel.createGroup(name) { showCreateGroupDialog = false } },
+            onCreate = { name, consumerNumber, operator ->
+                groupViewModel.createGroup(name, consumerNumber, operator) {
+                    showCreateGroupDialog = false
+                }
+            },
             isLoading = groupLoading
         )
     }

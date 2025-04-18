@@ -15,9 +15,7 @@ data class BillResponse(val totalUnits: Int, val totalAmount: Double)
 data class UserRequest(
     val phoneNumber: String,
     val password: String,
-    val name: String? = null,
-    val consumerNumber: String,
-    val operator: String
+    val name: String? = null
 )
 
 @Serializable
@@ -25,9 +23,7 @@ data class AuthResponse(
     val success: Boolean,
     val message: String? = null,
     val userId: Int? = null,
-    val name: String? = null,
-    val consumerNumber: String? = null,
-    val operator: String? = null
+    val name: String? = null
 )
 
 // Add these to Serialization.kt
@@ -75,9 +71,12 @@ data class GroupDetailsResponse(
     val creatorName: String,
     val creatorPhone: String,
     val billDetails: BillResponse,
+    val consumerNumber: String,
+    val operator: String,
     val members: List<MemberInfo>,
     val pieChartData: Map<String, Float>
 )
+
 
 @Serializable
 data class UpdateGroupRequest(
@@ -104,6 +103,14 @@ data class SubmitReadingRequest(
     val memberPhone: String,
     val reading: String
 )
+
+@Serializable
+data class UpdateGroupBillRequest(
+    val groupId: Int,
+    val consumerNumber: String,
+    val operator: String
+)
+
 
 fun Application.configureSerialization() {
     install(ContentNegotiation) {

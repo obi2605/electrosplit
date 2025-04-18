@@ -36,6 +36,9 @@ interface BillService {
     @GET("getGroupForUser/{phone}")
     fun getGroupForUser(@Path("phone") phone: String): Call<GroupDetailsResponse?>
 
+    @POST("updateGroupBill/{groupId}")
+    fun updateGroupBill(@Path("groupId") groupId: Int, @Body request: BillRequest): Call<AuthResponse>
+
 
 
 }

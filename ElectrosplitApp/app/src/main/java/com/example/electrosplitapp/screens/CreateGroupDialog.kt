@@ -7,18 +7,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.example.electrosplitapp.R
 
 @Composable
 fun CreateGroupDialog(
     onDismiss: () -> Unit,
-    onCreate: (String) -> Unit,
+    onCreate: (String, String, String) -> Unit, // (groupName, consumerNumber, operator)
     isLoading: Boolean
 ) {
     var groupName by remember { mutableStateOf("") }
+    var consumerNumber by remember { mutableStateOf("") }
+    var operator by remember { mutableStateOf("") }
+
     val focusRequester = remember { FocusRequester() }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -47,6 +48,26 @@ fun CreateGroupDialog(
                     singleLine = true
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = consumerNumber,
+                    onValueChange = { consumerNumber = it },
+                    label = { Text("Consumer Number") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = operator,
+                    onValueChange = { operator = it },
+                    label = { Text("Operator Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Row(
@@ -63,8 +84,10 @@ fun CreateGroupDialog(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
-                        onClick = { onCreate(groupName) },
-                        enabled = groupName.isNotBlank() && !isLoading
+                        onClick = {
+                            onCreate(groupName, consumerNumber, operator)
+                        },
+                        enabled = groupName.isNotBlank() && consumerNumber.isNotBlank() && operator.isNotBlank() && !isLoading
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(

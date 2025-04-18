@@ -84,7 +84,7 @@ fun LoginScreen(
                 coroutineScope.launch(Dispatchers.IO) {
                     try {
                         val response = authService.login(
-                            UserRequest(phoneNumber, password, consumerNumber = "", operator = "")
+                            UserRequest(phoneNumber, password)
                         ).execute()
 
                         withContext(Dispatchers.Main) {
@@ -95,9 +95,8 @@ fun LoginScreen(
                                         authManager.saveLoginDetails(
                                             userId = authResponse.userId.toString(),
                                             phoneNumber = phoneNumber,
-                                            name = userName,
-                                            consumerNumber = authResponse.consumerNumber ?: "",
-                                            operator = authResponse.operator ?: ""
+                                            name = userName
+
                                         )
 
                                         Log.d("LoginScreen", "Calling getGroupForUser with phone: $phoneNumber")

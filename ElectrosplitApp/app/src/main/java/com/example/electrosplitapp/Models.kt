@@ -13,9 +13,7 @@ data class BillResponse(
 data class UserRequest(
     val phoneNumber: String,
     val password: String,
-    val name: String? = null,
-    val consumerNumber: String,
-    val operator: String
+    val name: String? = null
 )
 
 data class AuthResponse(
@@ -23,8 +21,7 @@ data class AuthResponse(
     val message: String? = null,
     val userId: Int? = null,
     val name: String? = null,
-    val consumerNumber: String? = null,
-    val operator: String? = null
+
 )
 
 // Add to Models.kt
@@ -67,9 +64,12 @@ data class GroupDetailsResponse(
     val creatorName: String,
     val creatorPhone: String,
     val billDetails: BillResponse,
+    val consumerNumber: String,
+    val operator: String,
     val members: List<MemberInfo>,
     val pieChartData: Map<String, Float>
 )
+
 
 data class UpdateGroupRequest(
     val groupId: Int,

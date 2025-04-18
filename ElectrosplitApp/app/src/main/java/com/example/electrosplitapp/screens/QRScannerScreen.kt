@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.LifecycleOwner
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.viewinterop.AndroidView

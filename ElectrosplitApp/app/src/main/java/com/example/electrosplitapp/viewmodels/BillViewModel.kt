@@ -11,7 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -29,31 +28,20 @@ class BillViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    // Auth data flows
-    val consumerNumber = authManager.consumerNumber
-    val operatorName = authManager.operatorName
-    val userName = authManager.userName  // Changed from accountName to userName
 
-    init {
-        Log.d("BillViewModel", "ViewModel initialized")
-        fetchBill()
-    }
-
-    private fun fetchBill() {
+    // ✅ Call this manually with group-sourced values
+    fun fetchBill(consumerNumber: String, operatorName: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             try {
-                val consumer = consumerNumber.first()
-                val operator = operatorName.first()
-
-                if (consumer == null || operator == null) {
-                    _errorMessage.value = "Consumer/Operator not set in auth"
+                if (consumerNumber.isBlank() || operatorName.isBlank()) {
+                    _errorMessage.value = "Invalid bill information"
                     return@launch
                 }
 
-                val request = BillRequest(consumer, operator)
+                val request = BillRequest(consumerNumber, operatorName)
                 val response = withContext(Dispatchers.IO) {
                     billService.fetchBill(request).execute()
                 }

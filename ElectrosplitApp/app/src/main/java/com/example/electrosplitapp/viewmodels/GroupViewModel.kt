@@ -10,9 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+
 
 class GroupViewModel(
     private val billService: BillService,
@@ -28,12 +26,8 @@ class GroupViewModel(
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     val phoneNumber = authManager.phoneNumber
-    val userName = authManager.userName
-    val consumerNumber = authManager.consumerNumber
-    val operatorName = authManager.operatorName
     val currentGroupId = authManager.currentGroupId
     val isGroupCreator = authManager.isGroupCreator
 
@@ -54,27 +48,29 @@ class GroupViewModel(
         }
     }
 
-    fun createGroup(groupName: String, onSuccess: (GroupResponse) -> Unit) {
+    fun createGroup(
+        groupName: String,
+        consumerNumber: String,
+        operator: String,
+        onSuccess: (GroupResponse) -> Unit
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             try {
                 val phone = phoneNumber.first()
-                val consumer = consumerNumber.first()
-                val operator = operatorName.first()
 
-
-                if (phone == null || consumer == null || operator == null) {
+                if (phone == null) {
                     _errorMessage.value = "Missing required user data"
                     return@launch
                 }
 
-                // Temporarily create dummy request to get backend-generated groupCode
+                // Step 1: Send request without QR
                 val tempRequest = GroupRequest(
                     groupName = groupName,
                     creatorPhone = phone,
-                    consumerNumber = consumer,
+                    consumerNumber = consumerNumber,
                     operator = operator,
                     groupQr = ""
                 )
@@ -88,7 +84,7 @@ class GroupViewModel(
                         val groupCode = groupResponse.groupCode
                         val generatedQr = QRGenerator.generateBase64QRCode(groupCode)
 
-                        // Save locally with proper QR
+                        // Save locally
                         authManager.saveGroupDetails(
                             groupResponse.groupId,
                             groupResponse.groupName,
@@ -97,7 +93,7 @@ class GroupViewModel(
                             true
                         )
 
-                        // Push QR update to backend
+                        // Step 2: Send QR back to backend
                         withContext(Dispatchers.IO) {
                             billService.updateGroup(
                                 UpdateGroupRequest(groupResponse.groupId, groupResponse.groupName, generatedQr)
@@ -348,6 +344,36 @@ class GroupViewModel(
             } catch (e: Exception) {
                 _errorMessage.value = "Network error: ${e.message}"
                 Log.e("GroupViewModel", "Update group failed", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun updateGroupBill(newConsumer: String, newOperator: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = null
+            try {
+                val groupId = currentGroupId.first()?.toIntOrNull()
+                if (groupId == null) {
+                    _errorMessage.value = "Group ID missing"
+                    return@launch
+                }
+
+                val request = BillRequest(newConsumer, newOperator)
+                val response = withContext(Dispatchers.IO) {
+                    billService.updateGroupBill(groupId, request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    fetchGroupDetails(groupId)
+                    onSuccess()
+                } else {
+                    _errorMessage.value = "Error: ${response.code()}"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Network error: ${e.message}"
             } finally {
                 _isLoading.value = false
             }

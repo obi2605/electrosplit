@@ -28,13 +28,18 @@ fun GroupDrawerContent(
     groupQr: String,
     isCreator: Boolean,
     onEditGroup: (String) -> Unit,
+    onEditBill: (String, String) -> Unit,
     onLeaveGroup: () -> Unit,
     onDeleteGroup: () -> Unit,
-    onLogout: () -> Unit, // 👈 new
+    onLogout: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var showEditDialog by remember { mutableStateOf(false) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf(groupName) }
+
+    var showEditBillDialog by remember { mutableStateOf(false) }
+    var consumerNumber by remember { mutableStateOf("") }
+    var operatorName by remember { mutableStateOf("") }
 
     Surface(
         modifier = Modifier
@@ -71,13 +76,8 @@ fun GroupDrawerContent(
                         .size(180.dp)
                         .align(Alignment.CenterHorizontally)
                 )
-
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Scan this QR to join",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+                Text("Scan this QR to join", style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
 
             Spacer(Modifier.height(16.dp))
@@ -90,12 +90,23 @@ fun GroupDrawerContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(groupName, style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { showEditDialog = true }) {
+                IconButton(onClick = { showEditNameDialog = true }) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit Group Name")
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(8.dp))
+
+            TextButton(
+                onClick = { showEditBillDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = "Change Bill")
+                Spacer(Modifier.width(8.dp))
+                Text("Change Group Bill")
+            }
+
+            Spacer(Modifier.height(16.dp))
 
             if (isCreator) {
                 TextButton(
@@ -125,7 +136,6 @@ fun GroupDrawerContent(
 
             Spacer(Modifier.height(8.dp))
 
-            // 👇 ADD THIS LOGOUT OPTION
             TextButton(
                 onClick = {
                     onLogout()
@@ -140,12 +150,9 @@ fun GroupDrawerContent(
         }
     }
 
-    if (showEditDialog) {
-        Dialog(onDismissRequest = { showEditDialog = false }) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                tonalElevation = 8.dp
-            ) {
+    if (showEditNameDialog) {
+        Dialog(onDismissRequest = { showEditNameDialog = false }) {
+            Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 8.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Edit Group Name", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
@@ -155,17 +162,45 @@ fun GroupDrawerContent(
                         label = { Text("Group Name") }
                     )
                     Spacer(Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showEditDialog = false }) {
-                            Text("Cancel")
-                        }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showEditNameDialog = false }) { Text("Cancel") }
                         Spacer(Modifier.width(8.dp))
                         Button(onClick = {
                             onEditGroup(newName)
-                            showEditDialog = false
+                            showEditNameDialog = false
+                        }) {
+                            Text("Save")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showEditBillDialog) {
+        Dialog(onDismissRequest = { showEditBillDialog = false }) {
+            Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 8.dp) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Change Group Bill", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = consumerNumber,
+                        onValueChange = { consumerNumber = it },
+                        label = { Text("New Consumer Number") }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = operatorName,
+                        onValueChange = { operatorName = it },
+                        label = { Text("New Operator Name") }
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showEditBillDialog = false }) { Text("Cancel") }
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = {
+                            onEditBill(consumerNumber, operatorName)
+                            showEditBillDialog = false
                         }) {
                             Text("Save")
                         }

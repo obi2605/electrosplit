@@ -29,17 +29,15 @@ class AuthManager(private val context: Context) {
     suspend fun saveLoginDetails(
         userId: String,
         phoneNumber: String,
-        name: String,
-        consumerNumber: String,
-        operator: String
+        name: String
+
     ) {
         context.dataStore.edit { preferences ->
             preferences[IS_LOGGED_IN] = true
             preferences[USER_ID] = userId
             preferences[PHONE_NUMBER] = phoneNumber
             preferences[USER_NAME] = name
-            preferences[CONSUMER_NUMBER] = consumerNumber
-            preferences[OPERATOR_NAME] = operator
+
         }
     }
 
