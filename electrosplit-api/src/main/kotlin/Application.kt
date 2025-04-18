@@ -8,6 +8,8 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
+    println("✅ println: module() is definitely running")
+    log.info("✅ log: module() is definitely running")
     configureSerialization()
     configureRouting()
 }

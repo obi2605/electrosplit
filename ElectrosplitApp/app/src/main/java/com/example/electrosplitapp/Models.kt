@@ -26,3 +26,69 @@ data class AuthResponse(
     val consumerNumber: String? = null,
     val operator: String? = null
 )
+
+// Add to Models.kt
+data class GroupRequest(
+    val groupName: String,
+    val creatorPhone: String,
+    val consumerNumber: String,
+    val operator: String,
+    val groupQr: String
+)
+
+data class GroupResponse(
+    val groupId: Int,
+    val groupName: String,
+    val groupCode: String,
+    val groupQr: String,
+    val creatorName: String,
+    val creatorPhone: String,
+    val billDetails: BillResponse
+)
+
+data class JoinGroupRequest(
+    val groupCode: String,
+    val memberPhone: String
+)
+
+data class MemberInfo(
+    val name: String,
+    val phone: String,
+    val reading: Float?,
+    val amountToPay: Float,
+    val paymentStatus: String
+)
+
+data class GroupDetailsResponse(
+    val groupId: Int,
+    val groupName: String,
+    val groupCode: String,
+    val groupQr: String,
+    val creatorName: String,
+    val creatorPhone: String,
+    val billDetails: BillResponse,
+    val members: List<MemberInfo>,
+    val pieChartData: Map<String, Float>
+)
+
+data class UpdateGroupRequest(
+    val groupId: Int,
+    val newName: String?= null,
+    val newQr: String?= null
+)
+
+data class LeaveGroupRequest(
+    val groupId: Int,
+    val memberPhone: String
+)
+
+data class DeleteGroupRequest(
+    val groupId: Int,
+    val creatorPhone: String
+)
+
+data class SubmitReadingRequest(
+    val groupId: Int,
+    val memberPhone: String,
+    val reading: String
+)

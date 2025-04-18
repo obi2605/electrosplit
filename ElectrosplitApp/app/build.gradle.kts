@@ -135,4 +135,10 @@ dependencies {
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.logging.interceptor)
 
+    implementation(libs.accompanist.swiperefresh)
+    implementation(libs.barcode.scanning)
+    implementation(libs.core)
+
+
+
 }

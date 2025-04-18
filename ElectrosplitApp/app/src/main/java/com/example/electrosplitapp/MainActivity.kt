@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var authService: AuthService
     private lateinit var authManager: AuthManager
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

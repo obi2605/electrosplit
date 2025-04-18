@@ -4,27 +4,34 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.electrosplitapp.BillResponse
-import com.example.electrosplitapp.CameraScreen
-import com.example.electrosplitapp.VisionService
+import com.example.electrosplitapp.*
+import com.example.electrosplitapp.components.GroupDrawerContent
+import com.example.electrosplitapp.components.PieChart
 import com.example.electrosplitapp.utils.BillCalculator
 import com.example.electrosplitapp.viewmodels.BillViewModel
+import com.example.electrosplitapp.viewmodels.GroupViewModel
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -35,14 +42,21 @@ import kotlinx.coroutines.withContext
 fun HomeScreen(
     visionService: VisionService,
     onLogout: () -> Unit,
-    viewModel: BillViewModel = viewModel()
+    billViewModel: BillViewModel,
+    groupViewModel: GroupViewModel
 ) {
     val context = LocalContext.current
+
     var showCamera by remember { mutableStateOf(false) }
     var manualReading by remember { mutableStateOf("") }
     var showManualDialog by remember { mutableStateOf(false) }
     var showBreakdownDialog by remember { mutableStateOf(false) }
-    var calculatedBill by remember { mutableStateOf<BillCalculator.SplitResult?>(null) }
+    var selectedBreakdown by remember { mutableStateOf<BillCalculator.MemberBill?>(null) }
+
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var showJoinGroupDialog by remember { mutableStateOf(false) }
+    var showDrawer by remember { mutableStateOf(false) }
+    var showQrScanner by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -56,66 +70,228 @@ fun HomeScreen(
         }
     )
 
-    // State collection
-    val billResponse by viewModel.billResponse.collectAsState(initial = null)
-    val isLoading by viewModel.isLoading.collectAsState(initial = false)
-    val errorMessage by viewModel.errorMessage.collectAsState(initial = null)
-    val userName by viewModel.userName.collectAsState(initial = null)
-    val consumerNumber by viewModel.consumerNumber.collectAsState(initial = null)
-    val operator by viewModel.operatorName.collectAsState(initial = null)
+    val billResponse by billViewModel.billResponse.collectAsState(initial = null)
+    val billLoading by billViewModel.isLoading.collectAsState(initial = false)
+    val billErrorMessage by billViewModel.errorMessage.collectAsState(initial = null)
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Electrosplit") },
-                actions = {
-                    IconButton(onClick = {
-                        viewModel.viewModelScope.launch {
-                            viewModel.logout()
-                            onLogout()
+    val groupDetails by groupViewModel.groupDetails.collectAsState(initial = null)
+    val currentGroupIdState = groupViewModel.currentGroupId.collectAsState(initial = null)
+    val currentGroupId = currentGroupIdState.value
+    val isGroupCreator by groupViewModel.isGroupCreator.collectAsState(initial = false)
+    val groupLoading by groupViewModel.isLoading.collectAsState(initial = false)
+    val groupRestored by groupViewModel.groupRestored.collectAsState(initial = false)
+
+    val calculatedResult = remember(groupDetails, billResponse) {
+        val bill = billResponse
+        val members = groupDetails?.members
+        if (!members.isNullOrEmpty() && bill != null) {
+            BillCalculator.calculateSplit(
+                totalBillAmount = bill.totalAmount.toFloat(),
+                totalUnits = bill.totalUnits.toFloat(),
+                individualReadings = members.mapNotNull { it.reading },
+                groupSize = members.size
+            )
+        } else null
+    }
+
+    val calculatedBills = remember(calculatedResult, groupDetails) {
+        groupDetails?.members?.mapIndexedNotNull { index, member ->
+            val bill = calculatedResult?.individualBills?.getOrNull(index)
+            if (bill != null) member.name to bill else null
+        }?.toMap()
+    }
+
+    LaunchedEffect(currentGroupId) {
+        currentGroupId?.toIntOrNull()?.let { groupViewModel.fetchGroupDetails(it) }
+    }
+
+    if (!groupRestored) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    Box {
+        Scaffold(
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text("Electrosplit") },
+                    actions = {
+                        if (currentGroupId != null) {
+                            IconButton(onClick = { showDrawer = true }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Group menu")
+                            }
+                        } else {
+                            IconButton(onClick = {
+                                billViewModel.viewModelScope.launch {
+                                    billViewModel.logout()
+                                    onLogout()
+                                }
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout")
+                            }
                         }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout")
+                    }
+                )
+            }
+        ) { padding ->
+            Box(modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+            ) {
+                if (currentGroupId == null) {
+                    GroupOptionsScreen(
+                        onCreateGroupClick = { showCreateGroupDialog = true },
+                        onJoinGroupClick = { showJoinGroupDialog = true },
+                        onJoinWithQrClick = { showQrScanner = true }
+                    )
+                } else {
+                    val swipeState = rememberSwipeRefreshState(isRefreshing = groupLoading)
+                    SwipeRefresh(
+                        state = swipeState,
+                        onRefresh = { currentGroupId.toIntOrNull()?.let { groupViewModel.fetchGroupDetails(it) } },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            item {
+                                Card(modifier = Modifier.fillMaxWidth()) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(groupDetails?.groupName ?: "Group", style = MaterialTheme.typography.headlineSmall)
+                                        Text("Created by ${groupDetails?.creatorName ?: "Creator"}")
+
+                                        Spacer(Modifier.height(8.dp))
+
+                                        when {
+                                            billLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Loading bill data...")
+                                            }
+                                            billErrorMessage != null -> Text("Error: $billErrorMessage", color = MaterialTheme.colorScheme.error)
+                                            billResponse != null -> {
+                                                Text("Total Units: ${billResponse!!.totalUnits} kWh")
+                                                Text("Total Amount: ₹${"%.2f".format(billResponse!!.totalAmount)}")
+                                            }
+                                            else -> Text("No bill data available", color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+
+                            groupDetails?.members?.let { members ->
+                                itemsIndexed(members) { _, member ->
+                                    val memberBill = calculatedBills?.get(member.name)
+                                    Card(modifier = Modifier.fillMaxWidth()) {
+                                        Row(
+                                            modifier = Modifier.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column {
+                                                Text(member.name, style = MaterialTheme.typography.bodyLarge)
+                                                Text(member.reading?.let { "Reading: ${"%.2f".format(it)} kWh" } ?: "No reading submitted")
+                                            }
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text("₹${"%.2f".format(memberBill?.amountToPay ?: member.amountToPay)}")
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    TextButton(onClick = {
+                                                        selectedBreakdown = memberBill
+                                                        showBreakdownDialog = true
+                                                    }) {
+                                                        Text("How")
+                                                    }
+                                                }
+                                                Text(
+                                                    member.paymentStatus,
+                                                    color = if (member.paymentStatus == "Paid") Color.Green else Color.Red
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            item {
+                                calculatedBills?.takeIf { it.isNotEmpty() }?.let { data ->
+                                    PieChart(data = data.mapValues { it.value.amountToPay })
+                                } ?: groupDetails?.pieChartData?.takeIf { it.isNotEmpty() }?.let { data ->
+                                    PieChart(data = data)
+                                }
+                            }
+
+                            item {
+                                Column {
+                                    FilledTonalButton(onClick = { showCamera = true }, modifier = Modifier.fillMaxWidth()) {
+                                        Icon(Icons.Filled.CameraAlt, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Scan Meter")
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    FilledTonalButton(onClick = { galleryLauncher.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+                                        Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("From Gallery")
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    FilledTonalButton(onClick = { showManualDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                                        Icon(Icons.Filled.Keyboard, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Enter Manually")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            )
+            }
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
-        ) {
-            AccountInfoCard(
-                isLoading = isLoading,
-                errorMessage = errorMessage,
-                billResponse = billResponse,
-                userName = userName,
-                consumerNumber = consumerNumber,
-                operator = operator
-            )
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Submit Meter Reading",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            ReadingOptions(
-                onScanPressed = { showCamera = true },
-                onGalleryPressed = { galleryLauncher.launch("image/*") },
-                onManualPressed = { showManualDialog = true }
-            )
-
-            calculatedBill?.let { splitResult ->
-                Spacer(modifier = Modifier.height(24.dp))
-                CalculationResultCard(
-                    amount = splitResult.individualBills.first().amountToPay,
-                    onViewBreakdown = { showBreakdownDialog = true }
-                )
+        AnimatedVisibility(visible = showDrawer) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable { showDrawer = false }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopEnd)
+                ) {
+                    GroupDrawerContent(
+                        groupName = groupDetails?.groupName ?: "",
+                        groupCode = groupViewModel.authManager.currentGroupCode.collectAsState(initial = "").value ?: "",
+                        groupQr = groupViewModel.authManager.currentGroupQr.collectAsState(initial = "").value ?: "",
+                        isCreator = isGroupCreator,
+                        onEditGroup = {
+                            groupViewModel.updateGroupName(it) { showDrawer = false }
+                        },
+                        onLeaveGroup = {
+                            groupViewModel.leaveGroup { showDrawer = false }
+                        },
+                        onDeleteGroup = {
+                            groupViewModel.deleteGroup { showDrawer = false }
+                        },
+                        onDismiss = { showDrawer = false },
+                        onLogout = {
+                            billViewModel.viewModelScope.launch {
+                                billViewModel.logout()
+                                onLogout()
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -128,301 +304,99 @@ fun HomeScreen(
                 manualReading = reading
                 showManualDialog = true
             },
-            onClose = { showCamera = false }
+            onClose = {
+                showCamera = false
+            }
         )
     }
+
 
     if (showManualDialog) {
-        ManualReadingDialog(
-            initialValue = manualReading,
-            totalAmount = billResponse?.totalAmount?.toFloat() ?: 0f,
-            totalUnits = billResponse?.totalUnits?.toFloat() ?: 0f,
-            groupSize = 1,
-            onDismiss = { showManualDialog = false },
-            onSubmit = { reading, result ->
-                manualReading = reading
-                calculatedBill = result
-                showManualDialog = false
-            }
-        )
-    }
-
-    if (showBreakdownDialog && calculatedBill != null) {
-        BreakdownDialog(
-            breakdown = calculatedBill!!.getFormattedBreakdown(),
-            onDismiss = { showBreakdownDialog = false }
-        )
-    }
-}
-
-@Composable
-private fun AccountInfoCard(
-    isLoading: Boolean,
-    errorMessage: String?,
-    billResponse: BillResponse?,
-    userName: String?,
-    consumerNumber: String?,
-    operator: String?
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = userName ?: "My Account",
-                style = MaterialTheme.typography.titleLarge
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Consumer Number: ${consumerNumber ?: "Not available"}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Text(
-                text = "Operator: ${operator ?: "Not available"}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            when {
-                isLoading -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Loading bill data...")
-                    }
-                }
-
-                errorMessage != null -> {
-                    Text(
-                        text = "Error: ${errorMessage.takeIf { it.isNotBlank() } ?: "Unknown error"}",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                billResponse != null -> {
-                    Column {
-                        Text(
-                            text = "Total Units: ${billResponse.totalUnits} kWh",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "Total Amount: ₹${"%.2f".format(billResponse.totalAmount)}",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
-
-                else -> {
-                    Text(
-                        "No bill data available",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReadingOptions(
-    onScanPressed: () -> Unit,
-    onGalleryPressed: () -> Unit,
-    onManualPressed: () -> Unit
-) {
-    Column {
-        FilledTonalButton(
-            onClick = onScanPressed,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.CameraAlt, contentDescription = "Scan Meter")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Scan Meter")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        FilledTonalButton(
-            onClick = onGalleryPressed,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.PhotoLibrary, contentDescription = "From Gallery")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("From Gallery")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        FilledTonalButton(
-            onClick = onManualPressed,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.Keyboard, contentDescription = "Manual Entry")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Enter Manually")
-        }
-    }
-}
-
-@Composable
-private fun CalculationResultCard(amount: Float, onViewBreakdown: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Your Share",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = "₹${"%.2f".format(amount)}",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(
-                onClick = onViewBreakdown,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Show Calculation Details")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ManualReadingDialog(
-    initialValue: String,
-    totalAmount: Float,
-    totalUnits: Float,
-    groupSize: Int,
-    onDismiss: () -> Unit,
-    onSubmit: (String, BillCalculator.SplitResult) -> Unit
-) {
-    var reading by remember { mutableStateOf(initialValue) }
-    var showBreakdown by remember { mutableStateOf(false) }
-    val cleanReading = remember(reading) {
-        reading.replace("[^0-9.]".toRegex(), "").takeIf { it.isNotEmpty() } ?: "0"
-    }
-
-    val splitResult = remember(cleanReading, totalAmount, totalUnits, groupSize) {
-        if (cleanReading.isNotEmpty() && cleanReading != "0") {
-            val userReading = BillCalculator.parseReading(cleanReading)
-            BillCalculator.calculateSplit(
-                totalBillAmount = totalAmount,
-                totalUnits = totalUnits,
-                individualReadings = listOf(userReading),
-                groupSize = groupSize
-            )
-        } else {
-            // Return zero result if no valid reading
-            BillCalculator.SplitResult(
-                individualBills = listOf(BillCalculator.MemberBill(0f, 0f)),
-                commonAmount = 0f,
-                commonSharePerMember = 0f,
-                totalBillAmount = totalAmount,
-                totalUnits = totalUnits
-            )
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Enter Meter Reading") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = reading,
-                    onValueChange = { reading = it },
-                    label = { Text("Current Reading (kWh)") },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal
-                    ),
-                    trailingIcon = { Text("kWh") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (cleanReading.isNotEmpty() && cleanReading != "0") {
-                    Text(
-                        text = "Reading: ${cleanReading.toFloat()} kWh",
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val yourShare = splitResult.individualBills.first().amountToPay
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Your Share: ₹${"%.2f".format(yourShare)}",
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    if (cleanReading.isNotEmpty() && cleanReading != "0") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        TextButton(
-                            onClick = { showBreakdown = true },
-                            modifier = Modifier.padding(0.dp)
-                        ) {
-                            Text("How?")
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (cleanReading.isNotEmpty() && cleanReading != "0") {
-                        onSubmit(cleanReading, splitResult)
-                    }
-                },
-                enabled = cleanReading.isNotEmpty() && cleanReading != "0"
-            ) {
-                Text("Confirm")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-
-    if (showBreakdown) {
         AlertDialog(
-            onDismissRequest = { showBreakdown = false },
-            title = { Text("Calculation Breakdown") },
+            onDismissRequest = { showManualDialog = false },
+            title = { Text("Enter Meter Reading") },
             text = {
-                Text(splitResult.getFormattedBreakdown())
+                Column {
+                    OutlinedTextField(
+                        value = manualReading,
+                        onValueChange = { manualReading = it },
+                        label = { Text("Current Reading (kWh)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
-                Button(onClick = { showBreakdown = false }) {
-                    Text("Got It")
+                Button(
+                    onClick = {
+                        val response = billResponse ?: return@Button
+                        val result = BillCalculator.calculateSplit(
+                            totalBillAmount = response.totalAmount.toFloat(),
+                            totalUnits = response.totalUnits.toFloat(),
+                            individualReadings = listOf(manualReading.toFloatOrNull() ?: 0f),
+                            groupSize = groupDetails?.members?.size ?: 1
+                        )
+                        selectedBreakdown = result.individualBills.firstOrNull()
+                        showManualDialog = false
+                        currentGroupId?.toIntOrNull()?.let { groupId ->
+                            groupViewModel.submitReading(manualReading) {
+                                groupViewModel.fetchGroupDetails(groupId)
+                            }
+                        }
+                    },
+                    enabled = manualReading.isNotBlank()
+                ) {
+                    Text("Submit")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showManualDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )
     }
-}
 
-@Composable
-private fun BreakdownDialog(breakdown: String, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Calculation Breakdown") },
-        text = {
-            Text(breakdown)
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) {
-                Text("OK")
+    if (showBreakdownDialog && selectedBreakdown != null && calculatedResult != null) {
+        val breakdownText = calculatedResult.getFormattedBreakdown(selectedBreakdown)
+        AlertDialog(
+            onDismissRequest = { showBreakdownDialog = false },
+            title = { Text("Calculation Breakdown") },
+            text = { Text(breakdownText) },
+            confirmButton = {
+                Button(onClick = { showBreakdownDialog = false }) {
+                    Text("OK")
+                }
             }
-        }
-    )
+        )
+    }
+
+    if (showCreateGroupDialog) {
+        CreateGroupDialog(
+            onDismiss = { showCreateGroupDialog = false },
+            onCreate = { name -> groupViewModel.createGroup(name) { showCreateGroupDialog = false } },
+            isLoading = groupLoading
+        )
+    }
+
+    if (showJoinGroupDialog) {
+        JoinGroupDialog(
+            onDismiss = { showJoinGroupDialog = false },
+            onJoin = { code -> groupViewModel.joinGroup(code) { showJoinGroupDialog = false } },
+            isLoading = groupLoading
+        )
+    }
+
+    if (showQrScanner) {
+        QRScannerScreen(
+            onCodeScanned = { scannedCode ->
+                showQrScanner = false
+                groupViewModel.joinGroup(scannedCode) {
+                    // Group joined successfully
+                }
+            },
+            onClose = { showQrScanner = false }
+        )
+    }
 }
 
 private fun processImageFromUri(

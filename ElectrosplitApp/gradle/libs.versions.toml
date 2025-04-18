@@ -1,5 +1,8 @@
 [versions]
+accompanistSwiperefresh = "0.27.0"
 agp = "8.8.2"
+barcodeScanning = "17.3.0"
+core = "3.5.2"
 kotlin = "2.0.0"
 ksp = "2.0.0-1.0.21"
 loggingInterceptor = "4.12.0"
@@ -39,6 +42,7 @@ exifinterface = "1.4.0"
 paletteKtx = "1.0.0"
 
 # ML Kit
+swiperefreshlayout = "1.2.0-beta01"
 textRecognition = "16.0.1"
 playServicesMlkitTextRecognition = "19.0.1"
 
@@ -55,12 +59,17 @@ espressoCore = "3.6.1"
 kotlinxCoroutinesAndroid = "1.7.3"
 runtimeLivedata = "1.7.8"
 
+
 [libraries]
 # gRPC
+accompanist-swiperefresh = { module = "com.google.accompanist:accompanist-swiperefresh", version.ref = "accompanistSwiperefresh" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 androidx-material3-adaptive-navigation-suite = { module = "androidx.compose.material3:material3-adaptive-navigation-suite", version.ref = "material3AdaptiveNavigationSuite" }
 androidx-material3-v132 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
 androidx-material3-window-size = { group = "androidx.compose.material3", name = "material3-window-size-class", version.ref = "material3" }
+androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version.ref = "swiperefreshlayout" }
+barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
+core = { module = "com.google.zxing:core", version.ref = "core" }
 grpc-okhttp = { group = "io.grpc", name = "grpc-okhttp", version.ref = "grpcOkhttp" }
 grpc-api = { group = "io.grpc", name = "grpc-api", version.ref = "grpc" }
 grpc-stub = { group = "io.grpc", name = "grpc-stub", version.ref = "grpcStub" }

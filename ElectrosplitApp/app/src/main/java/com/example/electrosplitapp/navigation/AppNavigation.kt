@@ -2,12 +2,8 @@ package com.example.electrosplitapp.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -28,15 +24,24 @@ import com.example.electrosplitapp.screens.LoginScreen
 import com.example.electrosplitapp.screens.PredictionScreen
 import com.example.electrosplitapp.screens.RegisterScreen
 import com.example.electrosplitapp.viewmodels.BillViewModel
+import com.example.electrosplitapp.viewmodels.GroupViewModel
 
 @Composable
 fun AppNavigation(
     visionService: VisionService,
     billService: BillService,
-    authService: AuthService,  // Added this parameter
+    authService: AuthService,
     authManager: AuthManager
 ) {
     val navController = rememberNavController()
+    val groupViewModel: GroupViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return GroupViewModel(billService, authManager) as T
+            }
+        }
+    )
     var isLoggedIn by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -58,9 +63,12 @@ fun AppNavigation(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Login.route) {
+
                 LoginScreen(
-                    authService = authService,  // Passing it down
+                    authService = authService,
+                    billService = billService, // ✅ Add this
                     authManager = authManager,
+                    groupViewModel = groupViewModel, // ✅ Add this
                     onLoginSuccess = {
                         isLoggedIn = true
                         navController.navigate(Screen.Home.route) {
@@ -88,7 +96,7 @@ fun AppNavigation(
             }
 
             composable(Screen.Home.route) {
-                val viewModel: BillViewModel = viewModel(
+                val billViewModel: BillViewModel = viewModel(
                     factory = object : ViewModelProvider.Factory {
                         override fun <T : ViewModel> create(modelClass: Class<T>): T {
                             @Suppress("UNCHECKED_CAST")
@@ -96,6 +104,7 @@ fun AppNavigation(
                         }
                     }
                 )
+
                 HomeScreen(
                     visionService = visionService,
                     onLogout = {
@@ -103,7 +112,8 @@ fun AppNavigation(
                             popUpTo(Screen.Home.route) { inclusive = true }
                         }
                     },
-                    viewModel = viewModel
+                    billViewModel = billViewModel,
+                    groupViewModel = groupViewModel
                 )
             }
 

@@ -30,6 +30,81 @@ data class AuthResponse(
     val operator: String? = null
 )
 
+// Add these to Serialization.kt
+@Serializable
+data class GroupRequest(
+    val groupName: String,
+    val creatorPhone: String,
+    val consumerNumber: String,
+    val operator: String,
+    val groupQr: String
+)
+
+@Serializable
+data class GroupResponse(
+    val groupId: Int,
+    val groupName: String,
+    val groupCode: String,
+    val groupQr: String,
+    val creatorName: String,
+    val creatorPhone: String,
+    val billDetails: BillResponse
+)
+
+@Serializable
+data class JoinGroupRequest(
+    val groupCode: String,
+    val memberPhone: String
+)
+
+@Serializable
+data class MemberInfo(
+    val name: String,
+    val phone: String,
+    val reading: Float?,
+    val amountToPay: Float,
+    val paymentStatus: String
+)
+
+@Serializable
+data class GroupDetailsResponse(
+    val groupId: Int,
+    val groupName: String,
+    val groupCode: String,
+    val groupQr: String,
+    val creatorName: String,
+    val creatorPhone: String,
+    val billDetails: BillResponse,
+    val members: List<MemberInfo>,
+    val pieChartData: Map<String, Float>
+)
+
+@Serializable
+data class UpdateGroupRequest(
+    val groupId: Int,
+    val newName: String? = null,
+    val newQr: String? = null
+)
+
+@Serializable
+data class LeaveGroupRequest(
+    val groupId: Int,
+    val memberPhone: String
+)
+
+@Serializable
+data class DeleteGroupRequest(
+    val groupId: Int,
+    val creatorPhone: String
+)
+
+@Serializable
+data class SubmitReadingRequest(
+    val groupId: Int,
+    val memberPhone: String,
+    val reading: String
+)
+
 fun Application.configureSerialization() {
     install(ContentNegotiation) {
         json()

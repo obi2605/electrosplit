@@ -8,8 +8,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.electrosplitapp.AuthService
+import com.example.electrosplitapp.BillService
 import com.example.electrosplitapp.UserRequest
 import com.example.electrosplitapp.data.AuthManager
+import com.example.electrosplitapp.viewmodels.GroupViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -17,7 +19,9 @@ import kotlinx.coroutines.withContext
 @Composable
 fun LoginScreen(
     authService: AuthService,
+    billService: BillService,
     authManager: AuthManager,
+    groupViewModel: GroupViewModel,
     onLoginSuccess: () -> Unit,
     onRegisterClick: () -> Unit
 ) {
@@ -80,12 +84,7 @@ fun LoginScreen(
                 coroutineScope.launch(Dispatchers.IO) {
                     try {
                         val response = authService.login(
-                            UserRequest(
-                                phoneNumber = phoneNumber,
-                                password = password,
-                                consumerNumber = "",
-                                operator = ""
-                            )
+                            UserRequest(phoneNumber, password, consumerNumber = "", operator = "")
                         ).execute()
 
                         withContext(Dispatchers.Main) {
@@ -96,10 +95,44 @@ fun LoginScreen(
                                         authManager.saveLoginDetails(
                                             userId = authResponse.userId.toString(),
                                             phoneNumber = phoneNumber,
-                                            name = userName, // Will be updated from user data
+                                            name = userName,
                                             consumerNumber = authResponse.consumerNumber ?: "",
                                             operator = authResponse.operator ?: ""
                                         )
+
+                                        Log.d("LoginScreen", "Calling getGroupForUser with phone: $phoneNumber")
+
+                                        val groupResponse = withContext(Dispatchers.IO) {
+                                            try {
+                                                val call = billService.getGroupForUser(phoneNumber)
+                                                val apiResponse = call.execute()
+                                                if (apiResponse.isSuccessful) {
+                                                    Log.d("LoginScreen", "✅ API success, code: ${apiResponse.code()}")
+                                                    apiResponse.body()
+                                                } else {
+                                                    Log.e("LoginScreen", "❌ API failed, code: ${apiResponse.code()}")
+                                                    null
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e("LoginScreen", "🔥 API exception: ${e.message}", e)
+                                                null
+                                            }
+                                        }
+
+                                        Log.d("LoginScreen", "Group response from API: $groupResponse")
+
+                                        groupResponse?.let { group ->
+                                            Log.d("LoginScreen", "Saving group: ID=${group.groupId}, code=${group.groupCode}")
+                                            authManager.saveGroupDetails(
+                                                groupId = group.groupId,
+                                                groupName = group.groupName,
+                                                groupCode = group.groupCode,
+                                                groupQr = group.groupQr,
+                                                isCreator = group.creatorPhone == phoneNumber
+                                            )
+                                        }
+
+                                        groupViewModel.restoreGroupIfExists()
                                         onLoginSuccess()
                                     } else {
                                         errorMessage = authResponse.message ?: "Login failed"
