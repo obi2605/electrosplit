@@ -309,6 +309,8 @@ class GroupViewModel(
         }
     }
 
+
+
     fun updateGroupName(newName: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -379,5 +381,86 @@ class GroupViewModel(
             }
         }
     }
+
+    fun markAsPaid(groupId: Int, amountPaid: Float) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            try {
+                val phone = phoneNumber.first()
+                val group = groupDetails.value
+
+                if (phone == null || group == null) {
+                    _errorMessage.value = "Missing required info"
+                    return@launch
+                }
+
+                val request = MarkPaidRequest(
+                    memberPhone = phone,
+                    splitAmount = amountPaid.toDouble(),
+                    groupId = groupId,
+                    consumerNumber = group.consumerNumber
+                )
+
+                val response = withContext(Dispatchers.IO) {
+                    billService.markAsPaid(request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    fetchGroupDetails(groupId)
+                } else {
+                    _errorMessage.value = "Error: ${response.code()}"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Network error: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun resetPaymentStatus(groupId: Int, amountPaid: Double) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            try {
+                val phone = phoneNumber.first()
+                val consumer = groupDetails.value?.consumerNumber
+
+                if (phone == null || consumer.isNullOrBlank()) {
+                    _errorMessage.value = "Missing required data"
+                    return@launch
+                }
+
+                val request = MarkPaidRequest(
+                    groupId = groupId,
+                    memberPhone = phone,
+                    splitAmount = amountPaid,
+                    consumerNumber = consumer
+                )
+
+                val response = withContext(Dispatchers.IO) {
+                    billService.resetPaymentStatus(request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    fetchGroupDetails(groupId)
+                } else {
+                    _errorMessage.value = "Error: ${response.code()}"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Network error: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+
+
+
+
 
 }

@@ -39,6 +39,14 @@ interface BillService {
     @POST("updateGroupBill/{groupId}")
     fun updateGroupBill(@Path("groupId") groupId: Int, @Body request: BillRequest): Call<AuthResponse>
 
+    @POST("markAsPaid")
+    fun markAsPaid(@Body request: MarkPaidRequest): Call<AuthResponse>
+
+    @POST("resetPaymentStatus")
+    fun resetPaymentStatus(@Body request: ResetPaymentRequest): Call<AuthResponse>
+
+
+
 
 
 }

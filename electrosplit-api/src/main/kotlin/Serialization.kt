@@ -111,6 +111,18 @@ data class UpdateGroupBillRequest(
     val operator: String
 )
 
+@Serializable
+data class MarkPaidRequest(
+    val groupId: Int,
+    val memberPhone: String,
+    val splitAmount: Double,
+    val consumerNumber: String
+)
+
+
+
+
+
 
 fun Application.configureSerialization() {
     install(ContentNegotiation) {

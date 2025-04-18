@@ -21,6 +21,7 @@ import com.example.electrosplitapp.data.AuthManager
 import com.example.electrosplitapp.screens.HistoryScreen
 import com.example.electrosplitapp.screens.HomeScreen
 import com.example.electrosplitapp.screens.LoginScreen
+import com.example.electrosplitapp.screens.PaymentScreen
 import com.example.electrosplitapp.screens.PredictionScreen
 import com.example.electrosplitapp.screens.RegisterScreen
 import com.example.electrosplitapp.viewmodels.BillViewModel
@@ -106,6 +107,7 @@ fun AppNavigation(
                 )
 
                 HomeScreen(
+                    navController = navController,
                     visionService = visionService,
                     onLogout = {
                         navController.navigate(Screen.Login.route) {
@@ -124,6 +126,13 @@ fun AppNavigation(
             composable(Screen.Prediction.route) {
                 PredictionScreen()
             }
+
+            composable(Screen.Payment.route) {
+                PaymentScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
         }
     }
 }
@@ -140,6 +149,7 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object History : Screen("history")
     object Prediction : Screen("prediction")
+    object Payment : Screen("payment")
 
     companion object {
         val bottomNavItems = listOf(Home, History, Prediction)

@@ -283,6 +283,53 @@ fun Application.configureRouting() {
             call.respond(HttpStatusCode.OK, AuthResponse(true, "Bill updated for group"))
         }
 
+        post("/markAsPaid") {
+            val request = call.receive<MarkPaidRequest>()
+
+            val groupExists = groupExists(request.groupId)
+            val userExists = getUserByPhone(request.memberPhone) != null
+
+            if (!groupExists || !userExists) {
+                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Invalid group or user"))
+                return@post
+            }
+
+            // Update group_members table
+            updateMemberPaymentStatus(request.groupId, request.memberPhone)
+
+            // Add to splits table
+            insertSplitRecord(
+                phoneNumber = request.memberPhone,
+                splitAmount = request.splitAmount,
+                groupId = request.groupId,
+                consumerNumber = request.consumerNumber
+            )
+
+            call.respond(HttpStatusCode.OK, AuthResponse(true, "Marked as paid and recorded"))
+        }
+
+        post("/resetPaymentStatus") {
+            val request = call.receive<MarkPaidRequest>()
+
+            val groupExists = groupExists(request.groupId)
+            val userExists = getUserByPhone(request.memberPhone) != null
+
+            if (!groupExists || !userExists) {
+                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Invalid group or user"))
+                return@post
+            }
+
+            // Reset payment status
+            resetMemberPaymentStatus(request.groupId, request.memberPhone)
+
+            // Delete from splits using consumer number and bill_generation_date
+            deleteSplitRecord(request.memberPhone, request.consumerNumber)
+
+            call.respond(HttpStatusCode.OK, AuthResponse(true, "Payment status reset"))
+        }
+
+
+
 
 // Submit meter reading
         post("/submitReading") {
@@ -784,6 +831,90 @@ private fun updateGroupBill(groupId: Int, consumerNumber: String, operator: Stri
         }
     }
 }
+
+private fun updateMemberPaymentStatus(groupId: Int, memberPhone: String) {
+    val query = """
+        UPDATE group_members
+        SET payment_status = 'Paid'
+        WHERE group_id = ? AND member_phone = ?
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setInt(1, groupId)
+            stmt.setString(2, memberPhone)
+            stmt.executeUpdate()
+        }
+    }
+}
+
+private fun insertSplitRecord(
+    phoneNumber: String,
+    splitAmount: Double,
+    groupId: Int,
+    consumerNumber: String
+) {
+    val query = """
+        INSERT INTO splits (phone_number, split_amount, group_id, consumer_number, bill_generation_date)
+        VALUES (?, ?, ?, ?, (
+            SELECT bill_date FROM bills
+            WHERE consumer_number = ?
+            ORDER BY bill_date DESC
+            LIMIT 1
+        ))
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, phoneNumber)
+            stmt.setDouble(2, splitAmount)
+            stmt.setInt(3, groupId)
+            stmt.setString(4, consumerNumber)
+            stmt.setString(5, consumerNumber) // for subquery
+            stmt.executeUpdate()
+        }
+    }
+}
+
+private fun resetMemberPaymentStatus(groupId: Int, memberPhone: String) {
+    val query = """
+        UPDATE group_members
+        SET payment_status = 'Pending'
+        WHERE group_id = ? AND member_phone = ?
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setInt(1, groupId)
+            stmt.setString(2, memberPhone)
+            stmt.executeUpdate()
+        }
+    }
+}
+
+private fun deleteSplitRecord(phoneNumber: String, consumerNumber: String) {
+    val query = """
+        DELETE FROM splits
+        WHERE phone_number = ? AND consumer_number = ?
+        AND bill_generation_date = (
+            SELECT bill_date FROM bills
+            WHERE consumer_number = ?
+            ORDER BY bill_date DESC
+            LIMIT 1
+        )
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, phoneNumber)
+            stmt.setString(2, consumerNumber)
+            stmt.setString(3, consumerNumber)
+            stmt.executeUpdate()
+        }
+    }
+}
+
+
 
 
 

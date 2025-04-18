@@ -36,10 +36,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.navigation.NavController
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    navController: NavController,
     visionService: VisionService,
     onLogout: () -> Unit,
     billViewModel: BillViewModel,
@@ -210,31 +213,80 @@ fun HomeScreen(
                             groupDetails?.members?.let { members ->
                                 itemsIndexed(members) { _, member ->
                                     val memberBill = calculatedBills?.get(member.name)
+                                    val isCurrentUser = groupViewModel.phoneNumber.collectAsState(initial = "").value == member.phone
+
                                     Card(modifier = Modifier.fillMaxWidth()) {
-                                        Row(
-                                            modifier = Modifier.padding(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Column {
-                                                Text(member.name, style = MaterialTheme.typography.bodyLarge)
-                                                Text(member.reading?.let { "Reading: ${"%.2f".format(it)} kWh" } ?: "No reading submitted")
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(member.name, style = MaterialTheme.typography.bodyLarge)
+                                                    Text(member.reading?.let { "Reading: ${"%.2f".format(it)} kWh" } ?: "No reading submitted")
+                                                }
+                                                Column(horizontalAlignment = Alignment.End) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("₹${"%.2f".format(memberBill?.amountToPay ?: member.amountToPay)}")
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        TextButton(onClick = {
+                                                            selectedBreakdown = memberBill
+                                                            showBreakdownDialog = true
+                                                        }) {
+                                                            Text("How")
+                                                        }
+                                                    }
+                                                    Text(
+                                                        member.paymentStatus,
+                                                        color = if (member.paymentStatus == "Paid") Color.Green else Color.Red
+                                                    )
+                                                }
                                             }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text("₹${"%.2f".format(memberBill?.amountToPay ?: member.amountToPay)}")
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    TextButton(onClick = {
-                                                        selectedBreakdown = memberBill
-                                                        showBreakdownDialog = true
-                                                    }) {
-                                                        Text("How")
+
+                                            if (isCurrentUser) {
+                                                Spacer(modifier = Modifier.height(12.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                                ) {
+                                                    if (member.paymentStatus == "Pending") {
+                                                        Button(
+                                                            onClick = {
+                                                                navController.navigate("payment")
+                                                            }
+                                                        ) {
+                                                            Text("Pay")
+                                                        }
+
+                                                        Button(
+                                                            onClick = {
+                                                                groupDetails?.let { gd ->
+                                                                    groupViewModel.markAsPaid(
+                                                                        groupId = gd.groupId,
+                                                                        amountPaid = memberBill?.amountToPay ?: member.amountToPay
+                                                                    )
+                                                                }
+                                                            }
+                                                        ) {
+                                                            Text("Mark as Paid")
+                                                        }
+                                                    } else if (member.paymentStatus == "Paid") {
+                                                        Button(
+                                                            onClick = {
+                                                                groupDetails?.let { gd ->
+                                                                    groupViewModel.resetPaymentStatus(
+                                                                        groupId = gd.groupId,
+                                                                        amountPaid = (memberBill?.amountToPay ?: member.amountToPay).toDouble()
+                                                                    )
+                                                                }
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.1f))
+                                                        ) {
+                                                            Text("Reset", color = Color.Red)
+                                                        }
                                                     }
                                                 }
-                                                Text(
-                                                    member.paymentStatus,
-                                                    color = if (member.paymentStatus == "Paid") Color.Green else Color.Red
-                                                )
                                             }
                                         }
                                     }

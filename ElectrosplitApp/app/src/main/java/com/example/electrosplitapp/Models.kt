@@ -92,3 +92,19 @@ data class SubmitReadingRequest(
     val memberPhone: String,
     val reading: String
 )
+
+
+data class MarkPaidRequest(
+    val memberPhone: String,
+    val splitAmount: Double,
+    val groupId: Int,
+    val consumerNumber: String
+)
+
+typealias ResetPaymentRequest = MarkPaidRequest
+
+
+
+
+
+
