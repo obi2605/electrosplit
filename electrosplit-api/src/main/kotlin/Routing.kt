@@ -386,6 +386,56 @@ fun Application.configureRouting() {
             }
         }
 
+        get("/getPaymentHistory/{phone}") {
+            val phone = call.parameters["phone"]
+
+            if (phone.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Phone number is required"))
+                return@get
+            }
+
+            try {
+                val query = """
+            SELECT s.split_amount, s.consumer_number, s.bill_generation_date, s.datetime_paid,
+                   g.group_name, g.bill_operator
+            FROM splits s
+            JOIN groups g ON s.group_id = g.group_id
+            WHERE s.phone_number = ?
+            ORDER BY s.bill_generation_date DESC
+        """.trimIndent()
+
+                val history = mutableListOf<PaymentHistoryEntry>()
+
+                createDataSource().connection.use { conn ->
+                    conn.prepareStatement(query).use { stmt ->
+                        stmt.setString(1, phone)
+                        stmt.executeQuery().use { rs ->
+                            while (rs.next()) {
+                                history.add(
+                                    PaymentHistoryEntry(
+                                        amount = rs.getDouble("split_amount"),
+                                        consumerNumber = rs.getString("consumer_number"),
+                                        billGenerationDate = rs.getTimestamp("bill_generation_date").toString(),
+                                        datetimePaid = rs.getTimestamp("datetime_paid").toString(),
+                                        groupName = rs.getString("group_name"),
+                                        operator = rs.getString("bill_operator")
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                call.respond(HttpStatusCode.OK, history)
+            } catch (e: Exception) {
+                call.application.environment.log.error("❌ Failed to fetch payment history", e)
+                call.respond(HttpStatusCode.InternalServerError, "Internal server error")
+            }
+        }
+
+
+
+
         get("/ping") {
             call.application.environment.log.info("✅ /ping was hit")
             call.respondText("pong")

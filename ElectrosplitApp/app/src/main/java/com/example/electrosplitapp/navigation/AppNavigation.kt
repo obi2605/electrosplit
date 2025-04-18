@@ -13,26 +13,21 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.electrosplitapp.AuthService
-import com.example.electrosplitapp.BillService
-import com.example.electrosplitapp.VisionService
+import com.example.electrosplitapp.*
 import com.example.electrosplitapp.components.BottomNavigationBar
 import com.example.electrosplitapp.data.AuthManager
-import com.example.electrosplitapp.screens.HistoryScreen
-import com.example.electrosplitapp.screens.HomeScreen
-import com.example.electrosplitapp.screens.LoginScreen
-import com.example.electrosplitapp.screens.PaymentScreen
-import com.example.electrosplitapp.screens.PredictionScreen
-import com.example.electrosplitapp.screens.RegisterScreen
+import com.example.electrosplitapp.screens.*
 import com.example.electrosplitapp.viewmodels.BillViewModel
 import com.example.electrosplitapp.viewmodels.GroupViewModel
+import com.example.electrosplitapp.viewmodels.HistoryViewModel
 
 @Composable
 fun AppNavigation(
     visionService: VisionService,
     billService: BillService,
     authService: AuthService,
-    authManager: AuthManager
+    authManager: AuthManager,
+    paymentHistoryService: PaymentHistoryService
 ) {
     val navController = rememberNavController()
     val groupViewModel: GroupViewModel = viewModel(
@@ -64,12 +59,11 @@ fun AppNavigation(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Login.route) {
-
                 LoginScreen(
                     authService = authService,
-                    billService = billService, // ✅ Add this
+                    billService = billService,
                     authManager = authManager,
-                    groupViewModel = groupViewModel, // ✅ Add this
+                    groupViewModel = groupViewModel,
                     onLoginSuccess = {
                         isLoggedIn = true
                         navController.navigate(Screen.Home.route) {
@@ -105,6 +99,15 @@ fun AppNavigation(
                         }
                     }
                 )
+                val historyViewModel: HistoryViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            @Suppress("UNCHECKED_CAST")
+                            return HistoryViewModel(paymentHistoryService, authManager) as T
+                        }
+                    }
+                )
+
 
                 HomeScreen(
                     navController = navController,
@@ -115,13 +118,24 @@ fun AppNavigation(
                         }
                     },
                     billViewModel = billViewModel,
-                    groupViewModel = groupViewModel
+                    groupViewModel = groupViewModel,
+                    historyViewModel = historyViewModel
                 )
             }
 
             composable(Screen.History.route) {
-                HistoryScreen()
+                val historyViewModel: HistoryViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            @Suppress("UNCHECKED_CAST")
+                            return HistoryViewModel(paymentHistoryService, authManager) as T
+                        }
+                    }
+                )
+
+                HistoryScreen(historyViewModel = historyViewModel) // ✅ FIX: pass as named parameter
             }
+
 
             composable(Screen.Prediction.route) {
                 PredictionScreen()
@@ -132,7 +146,6 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
-
         }
     }
 }

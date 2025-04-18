@@ -42,7 +42,9 @@ class MainActivity : ComponentActivity() {
                     visionService = visionService,
                     billService = billService,
                     authService = authService,
-                    authManager = authManager
+                    authManager = authManager,
+                    paymentHistoryService = createRetrofit().create(PaymentHistoryService::class.java)
+
                 )
             }
         }

@@ -13,7 +13,9 @@ fun MainApp(
     visionService: VisionService,
     billService: BillService,
     authService: AuthService,  // Added this parameter
-    authManager: AuthManager
+    authManager: AuthManager,
+    paymentHistoryService: PaymentHistoryService // <-- Add this
+
 ) {
     ElectrosplitAppTheme {
         MaterialTheme {
@@ -22,7 +24,8 @@ fun MainApp(
                     visionService = visionService,
                     billService = billService,
                     authService = authService,  // Passing it down
-                    authManager = authManager
+                    authManager = authManager,
+                    paymentHistoryService = paymentHistoryService
                 )
             }
         }

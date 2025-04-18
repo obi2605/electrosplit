@@ -119,7 +119,15 @@ data class MarkPaidRequest(
     val consumerNumber: String
 )
 
-
+@Serializable
+data class PaymentHistoryEntry(
+    val amount: Double,
+    val consumerNumber: String,
+    val billGenerationDate: String,
+    val datetimePaid: String,
+    val groupName: String,
+    val operator: String
+)
 
 
 

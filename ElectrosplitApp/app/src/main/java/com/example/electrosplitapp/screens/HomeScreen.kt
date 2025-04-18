@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.navigation.NavController
+import com.example.electrosplitapp.viewmodels.HistoryViewModel
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,7 +47,8 @@ fun HomeScreen(
     visionService: VisionService,
     onLogout: () -> Unit,
     billViewModel: BillViewModel,
-    groupViewModel: GroupViewModel
+    groupViewModel: GroupViewModel,
+    historyViewModel: HistoryViewModel
 ) {
     val context = LocalContext.current
 
@@ -266,11 +268,19 @@ fun HomeScreen(
                                                                         groupId = gd.groupId,
                                                                         amountPaid = memberBill?.amountToPay ?: member.amountToPay
                                                                     )
+
+                                                                    // Add small delay before fetching history
+                                                                    CoroutineScope(Dispatchers.Main).launch {
+                                                                        kotlinx.coroutines.delay(1000)
+                                                                        historyViewModel.fetchPaymentHistory()
+                                                                    }
                                                                 }
                                                             }
                                                         ) {
                                                             Text("Mark as Paid")
                                                         }
+
+
                                                     } else if (member.paymentStatus == "Paid") {
                                                         Button(
                                                             onClick = {
@@ -279,12 +289,17 @@ fun HomeScreen(
                                                                         groupId = gd.groupId,
                                                                         amountPaid = (memberBill?.amountToPay ?: member.amountToPay).toDouble()
                                                                     )
+                                                                    CoroutineScope(Dispatchers.Main).launch {
+                                                                        kotlinx.coroutines.delay(1000)
+                                                                        historyViewModel.fetchPaymentHistory()
+                                                                    }
                                                                 }
                                                             },
                                                             colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.1f))
                                                         ) {
                                                             Text("Reset", color = Color.Red)
                                                         }
+
                                                     }
                                                 }
                                             }
