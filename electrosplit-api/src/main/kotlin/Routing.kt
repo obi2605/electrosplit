@@ -820,11 +820,13 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
 
     // Get all members with their readings and payment status
     val membersQuery = """
-        SELECT u.name, gm.member_phone, gm.current_reading, gm.payment_status, gm.offset_value, gm.offset_origin
-        FROM group_members gm
-        JOIN users u ON gm.member_phone = u.phone_number
-        WHERE gm.group_id = ?
-    """.trimIndent()
+    SELECT u.name, gm.member_phone, gm.current_reading, gm.payment_status,
+           gm.offset_value, gm.offset_origin, gm.previous_offset_value
+    FROM group_members gm
+    JOIN users u ON gm.member_phone = u.phone_number
+    WHERE gm.group_id = ?
+""".trimIndent()
+
 
     val members = mutableListOf<MemberInfo>()
     val pieChartData = mutableMapOf<String, Float>()
@@ -838,6 +840,8 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
                     val phone = rs.getString("member_phone")
                     val reading = rs.getFloat("current_reading")
                     val paymentStatus = rs.getString("payment_status")
+                    val previousOffsetValue = rs.getFloat("previous_offset_value")
+
 
                     // Calculate amount to pay (simplified for now)
                     val amountToPay = if (reading > 0) {
@@ -855,7 +859,8 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
                         amountToPay = amountToPay,
                         paymentStatus = paymentStatus,
                         offsetValue = if (offsetValue > 0) offsetValue else null,
-                        offsetOrigin = offsetOrigin ?: ""
+                        offsetOrigin = offsetOrigin ?: "",
+                        previousOffsetValue = if (previousOffsetValue > 0) previousOffsetValue else null
                     ))
 
                     pieChartData[name] = amountToPay

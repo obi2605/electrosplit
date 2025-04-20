@@ -55,7 +55,8 @@ data class MemberInfo(
     val amountToPay: Float,
     val paymentStatus: String,
     val offsetValue: Float? = null,
-    val offsetOrigin: String = ""
+    val offsetOrigin: String = "",
+    val previousOffsetValue: Float? = null
 )
 
 data class GroupDetailsResponse(

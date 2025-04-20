@@ -86,18 +86,27 @@ fun HomeScreen(
     val groupLoading by groupViewModel.isLoading.collectAsState(initial = false)
     val groupRestored by groupViewModel.groupRestored.collectAsState(initial = false)
 
-    val calculatedResult = remember(groupDetails, billResponse) {
+    val adjustedReadings = groupDetails?.members?.mapNotNull { member ->
+        val reading = member.reading ?: return@mapNotNull null
+        val offset = when (member.paymentStatus) {
+            "Paid" -> member.previousOffsetValue ?: 0f
+            else -> member.offsetValue ?: 0f
+        }
+        reading - offset
+    }
+
+    val calculatedResult = remember(adjustedReadings, billResponse) {
         val bill = billResponse
-        val members = groupDetails?.members
-        if (!members.isNullOrEmpty() && bill != null) {
+        if (!adjustedReadings.isNullOrEmpty() && bill != null) {
             BillCalculator.calculateSplit(
                 totalBillAmount = bill.totalAmount.toFloat(),
                 totalUnits = bill.totalUnits.toFloat(),
-                individualReadings = members.mapNotNull { it.reading },
-                groupSize = members.size
+                individualReadings = adjustedReadings,
+                groupSize = adjustedReadings.size
             )
         } else null
     }
+
 
     val calculatedBills = remember(calculatedResult, groupDetails) {
         groupDetails?.members?.mapIndexedNotNull { index, member ->
@@ -226,7 +235,21 @@ fun HomeScreen(
                                             ) {
                                                 Column {
                                                     Text(member.name, style = MaterialTheme.typography.bodyLarge)
-                                                    Text(member.reading?.let { "Reading: ${"%.2f".format(it)} kWh" } ?: "No reading submitted")
+                                                    val adjustedReading = member.reading?.let { r ->
+                                                        when (member.paymentStatus) {
+                                                            "Paid" -> r - (member.previousOffsetValue ?: 0f)
+                                                            else -> r - (member.offsetValue ?: 0f)
+                                                        }
+                                                    }
+                                                    Text(
+                                                        when {
+                                                            member.reading == null -> "No reading submitted"
+                                                            else -> "Reading: ${"%.2f".format(adjustedReading ?: 0f)} kWh"
+                                                        }
+                                                    )
+
+
+
                                                 }
                                                 Column(horizontalAlignment = Alignment.End) {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
