@@ -57,10 +57,13 @@ data class JoinGroupRequest(
 data class MemberInfo(
     val name: String,
     val phone: String,
-    val reading: Float?,
+    val reading: Float? = null,
     val amountToPay: Float,
-    val paymentStatus: String
+    val paymentStatus: String,
+    val offsetValue: Float? = null,
+    val offsetOrigin: String = ""
 )
+
 
 @Serializable
 data class GroupDetailsResponse(
@@ -100,9 +103,12 @@ data class DeleteGroupRequest(
 @Serializable
 data class SubmitReadingRequest(
     val groupId: Int,
-    val memberPhone: String,
-    val reading: String
+    val phone: String,
+    val reading: String,
+    val offset: String? = null // ✅ Add this
 )
+
+
 
 @Serializable
 data class UpdateGroupBillRequest(

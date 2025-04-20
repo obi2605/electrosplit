@@ -275,7 +275,7 @@ class GroupViewModel(
         }
     }
 
-    fun submitReading(reading: String, onSuccess: () -> Unit) {
+    fun submitReading(reading: String, offset: String? = null, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
@@ -289,7 +289,13 @@ class GroupViewModel(
                     return@launch
                 }
 
-                val request = SubmitReadingRequest(groupId, phone, reading)
+                val request = SubmitReadingRequest(
+                    groupId = groupId,
+                    phone = phone,
+                    reading = reading,
+                    offset = offset // ✅ include offset
+                )
+
                 val response = withContext(Dispatchers.IO) {
                     billService.submitReading(request).execute()
                 }
@@ -302,7 +308,6 @@ class GroupViewModel(
                 }
             } catch (e: Exception) {
                 _errorMessage.value = "Network error: ${e.message}"
-                Log.e("GroupViewModel", "Submit reading failed", e)
             } finally {
                 _isLoading.value = false
             }
@@ -457,6 +462,14 @@ class GroupViewModel(
             }
         }
     }
+
+    suspend fun getCurrentUserOffset(): Pair<Float?, String?> {
+        val phone = phoneNumber.first() ?: return null to null
+        val member = groupDetails.value?.members?.find { it.phone == phone }
+        return member?.offsetValue to member?.offsetOrigin
+    }
+
+
 
 
 

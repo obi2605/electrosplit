@@ -285,10 +285,21 @@ fun HomeScreen(
                                                         Button(
                                                             onClick = {
                                                                 groupDetails?.let { gd ->
-                                                                    groupViewModel.resetPaymentStatus(
-                                                                        groupId = gd.groupId,
-                                                                        amountPaid = (memberBill?.amountToPay ?: member.amountToPay).toDouble()
-                                                                    )
+                                                                    val currentReading = member.reading ?: 0f
+                                                                    val currentOffset = member.offsetValue ?: 0f
+                                                                    val restoredOffset = (currentReading - currentOffset).coerceAtLeast(0f)
+
+                                                                    groupViewModel.submitReading(currentReading.toString(), restoredOffset.toString()) {
+                                                                        groupViewModel.resetPaymentStatus(
+                                                                            groupId = gd.groupId,
+                                                                            amountPaid = (memberBill?.amountToPay ?: member.amountToPay).toDouble()
+                                                                        )
+                                                                        CoroutineScope(Dispatchers.Main).launch {
+                                                                            kotlinx.coroutines.delay(1000)
+                                                                            historyViewModel.fetchPaymentHistory()
+                                                                        }
+                                                                    }
+
                                                                     CoroutineScope(Dispatchers.Main).launch {
                                                                         kotlinx.coroutines.delay(1000)
                                                                         historyViewModel.fetchPaymentHistory()
@@ -409,6 +420,20 @@ fun HomeScreen(
 
 
     if (showManualDialog) {
+        val offsetInfo by produceState<Pair<Float?, String?>>(initialValue = null to null) {
+            value = groupViewModel.getCurrentUserOffset()
+        }
+
+        val (offsetValue, offsetOrigin) = offsetInfo
+        val offsetDisplay = if (offsetValue != null) "Using offset: ${"%.2f".format(offsetValue)}"
+        else "No offset set"
+        val originDisplay = offsetOrigin?.let {
+            if (it == "manual") "(Manually entered)"
+            else "(Auto-set after payment)"
+        } ?: ""
+
+        val offsetInput = remember { mutableStateOf("") }
+
         AlertDialog(
             onDismissRequest = { showManualDialog = false },
             title = { Text("Enter Meter Reading") },
@@ -420,23 +445,49 @@ fun HomeScreen(
                         label = { Text("Current Reading (kWh)") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = offsetInput.value,
+                        onValueChange = { offsetInput.value = it },
+                        label = { Text("Manual Offset (optional)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text("$offsetDisplay $originDisplay", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val response = billResponse ?: return@Button
-                        val result = BillCalculator.calculateSplit(
-                            totalBillAmount = response.totalAmount.toFloat(),
-                            totalUnits = response.totalUnits.toFloat(),
-                            individualReadings = listOf(manualReading.toFloatOrNull() ?: 0f),
-                            groupSize = groupDetails?.members?.size ?: 1
-                        )
-                        selectedBreakdown = result.individualBills.firstOrNull()
-                        showManualDialog = false
-                        currentGroupId?.toIntOrNull()?.let { groupId ->
-                            groupViewModel.submitReading(manualReading) {
-                                groupViewModel.fetchGroupDetails(groupId)
+
+                        CoroutineScope(Dispatchers.Main).launch {
+                            val (existingOffset, _) = groupViewModel.getCurrentUserOffset()
+                            val enteredOffset = offsetInput.value.toFloatOrNull() ?: existingOffset ?: 0f
+                            val enteredReading = manualReading.toFloatOrNull() ?: 0f
+                            val adjustedReading = enteredReading - enteredOffset
+
+                            val result = BillCalculator.calculateSplit(
+                                totalBillAmount = response.totalAmount.toFloat(),
+                                totalUnits = response.totalUnits.toFloat(),
+                                individualReadings = listOf(adjustedReading),
+                                groupSize = groupDetails?.members?.size ?: 1
+                            )
+
+                            selectedBreakdown = result.individualBills.firstOrNull()
+                            showManualDialog = false
+
+                            currentGroupId?.toIntOrNull()?.let { groupId ->
+                                groupViewModel.submitReading(
+                                    reading = manualReading,
+                                    offset = offsetInput.value.takeIf { it.isNotBlank() }
+                                ) {
+                                    groupViewModel.fetchGroupDetails(groupId)
+                                }
                             }
                         }
                     },

@@ -285,47 +285,159 @@ fun Application.configureRouting() {
 
         post("/markAsPaid") {
             val request = call.receive<MarkPaidRequest>()
+            val phone = request.memberPhone
+            val groupId = request.groupId
+            val amount = request.splitAmount
+            val consumerNumber = request.consumerNumber
 
-            val groupExists = groupExists(request.groupId)
-            val userExists = getUserByPhone(request.memberPhone) != null
+            try {
+                createDataSource().connection.use { conn ->
+                    conn.autoCommit = false
 
-            if (!groupExists || !userExists) {
-                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Invalid group or user"))
-                return@post
+                    // ✅ 1. Insert into splits
+                    conn.prepareStatement(
+                        """
+                INSERT INTO splits (phone_number, split_amount, group_id, consumer_number, datetime_paid, bill_generation_date)
+                VALUES (?, ?, ?, ?, NOW(), 
+                    (SELECT bill_date FROM bills WHERE consumer_number = ? ORDER BY bill_date DESC LIMIT 1)
+                )
+                """.trimIndent()
+                    ).use { stmt ->
+                        stmt.setString(1, phone)
+                        stmt.setDouble(2, amount)
+                        stmt.setInt(3, groupId)
+                        stmt.setString(4, consumerNumber)
+                        stmt.setString(5, consumerNumber)
+                        stmt.executeUpdate()
+                    }
+
+                    // ✅ 2. Update payment status to 'Paid'
+                    conn.prepareStatement(
+                        "UPDATE group_members SET payment_status = 'Paid' WHERE member_phone = ? AND group_id = ?"
+                    ).use { stmt ->
+                        stmt.setString(1, phone)
+                        stmt.setInt(2, groupId)
+                        stmt.executeUpdate()
+                    }
+
+                    // ✅ 3. Fetch current reading and current offset (for backup)
+                    val (reading, existingOffset, existingOrigin) = conn.prepareStatement(
+                        "SELECT current_reading, offset_value, offset_origin FROM group_members WHERE member_phone = ? AND group_id = ?"
+                    ).use { stmt ->
+                        stmt.setString(1, phone)
+                        stmt.setInt(2, groupId)
+                        stmt.executeQuery().use { rs ->
+                            if (rs.next()) {
+                                Triple(
+                                    rs.getDouble("current_reading"),
+                                    rs.getFloat("offset_value"),
+                                    rs.getString("offset_origin")
+                                )
+                            } else null
+                        }
+                    } ?: throw IllegalStateException("User not found in group")
+
+                    // ✅ 4. Update offset and back up old offset
+                    conn.prepareStatement(
+                        """
+                UPDATE group_members
+                SET 
+                    previous_offset_value = offset_value,
+                    previous_offset_origin = offset_origin,
+                    offset_value = ?, 
+                    offset_origin = 'Auto'
+                WHERE member_phone = ? AND group_id = ?
+                """.trimIndent()
+                    ).use { stmt ->
+                        stmt.setDouble(1, reading)
+                        stmt.setString(2, phone)
+                        stmt.setInt(3, groupId)
+                        stmt.executeUpdate()
+                    }
+
+                    conn.commit()
+                }
+
+                println("✅ Split: amount=$amount, group=$groupId, phone=$phone")
+                call.respond(HttpStatusCode.OK, AuthResponse(true, "Marked as paid and recorded"))
+            } catch (e: Exception) {
+                println("❌ Failed to mark as paid: ${e.message}")
+                call.respond(HttpStatusCode.InternalServerError, AuthResponse(false, "Failed: ${e.message}"))
             }
-
-            // Update group_members table
-            updateMemberPaymentStatus(request.groupId, request.memberPhone)
-
-            // Add to splits table
-            insertSplitRecord(
-                phoneNumber = request.memberPhone,
-                splitAmount = request.splitAmount,
-                groupId = request.groupId,
-                consumerNumber = request.consumerNumber
-            )
-
-            call.respond(HttpStatusCode.OK, AuthResponse(true, "Marked as paid and recorded"))
         }
+
+
+
 
         post("/resetPaymentStatus") {
             val request = call.receive<MarkPaidRequest>()
+            val phone = request.memberPhone
+            val groupId = request.groupId
+            val consumerNumber = request.consumerNumber
 
-            val groupExists = groupExists(request.groupId)
-            val userExists = getUserByPhone(request.memberPhone) != null
+            try {
+                createDataSource().connection.use { conn ->
+                    conn.autoCommit = false
 
-            if (!groupExists || !userExists) {
-                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Invalid group or user"))
-                return@post
+                    // ✅ 1. Reset payment status
+                    conn.prepareStatement(
+                        """
+                UPDATE group_members
+                SET payment_status = 'Pending'
+                WHERE group_id = ? AND member_phone = ?
+                """.trimIndent()
+                    ).use { stmt ->
+                        stmt.setInt(1, groupId)
+                        stmt.setString(2, phone)
+                        stmt.executeUpdate()
+                    }
+
+                    // ✅ 2. Delete from splits table
+                    conn.prepareStatement(
+                        """
+                DELETE FROM splits
+                WHERE phone_number = ?
+                AND consumer_number = ?
+                AND bill_generation_date = (
+                    SELECT bill_date FROM bills
+                    WHERE consumer_number = ?
+                    ORDER BY bill_date DESC
+                    LIMIT 1
+                )
+                """.trimIndent()
+                    ).use { stmt ->
+                        stmt.setString(1, phone)
+                        stmt.setString(2, consumerNumber)
+                        stmt.setString(3, consumerNumber)
+                        stmt.executeUpdate()
+                    }
+
+                    // ✅ 3. Restore previous offset value
+                    conn.prepareStatement(
+                        """
+                UPDATE group_members
+                SET 
+                    offset_value = previous_offset_value,
+                    offset_origin = previous_offset_origin,
+                    previous_offset_value = NULL,
+                    previous_offset_origin = NULL
+                WHERE group_id = ? AND member_phone = ?
+                """.trimIndent()
+                    ).use { stmt ->
+                        stmt.setInt(1, groupId)
+                        stmt.setString(2, phone)
+                        stmt.executeUpdate()
+                    }
+
+                    conn.commit()
+                }
+
+                println("✅ Payment status reset and offset restored for phone=$phone, group=$groupId")
+                call.respond(HttpStatusCode.OK, AuthResponse(true, "Payment status reset"))
+            } catch (e: Exception) {
+                println("❌ Failed to reset payment: ${e.message}")
+                call.respond(HttpStatusCode.InternalServerError, AuthResponse(false, "Reset failed: ${e.message}"))
             }
-
-            // Reset payment status
-            resetMemberPaymentStatus(request.groupId, request.memberPhone)
-
-            // Delete from splits using consumer number and bill_generation_date
-            deleteSplitRecord(request.memberPhone, request.consumerNumber)
-
-            call.respond(HttpStatusCode.OK, AuthResponse(true, "Payment status reset"))
         }
 
 
@@ -334,35 +446,59 @@ fun Application.configureRouting() {
 // Submit meter reading
         post("/submitReading") {
             val request = call.receive<SubmitReadingRequest>()
+            val phone = request.phone
+            val groupId = request.groupId
+            val reading = request.reading.toDoubleOrNull()
+            val offset = request.offset?.toFloatOrNull()
 
-            // Verify group exists
-            if (!groupExists(request.groupId)) {
-                call.respond(HttpStatusCode.NotFound,
-                    AuthResponse(false, "Group not found"))
+            if (reading == null) {
+                call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Invalid reading"))
                 return@post
             }
 
-            // Verify member exists and is in group
-            if (!isGroupMember(request.groupId, request.memberPhone)) {
-                call.respond(HttpStatusCode.Forbidden,
-                    AuthResponse(false, "Not a member of this group"))
-                return@post
+            try {
+                createDataSource().connection.use { conn ->
+                    conn.autoCommit = false
+
+                    // 1. Update current reading
+                    conn.prepareStatement(
+                        """
+                UPDATE group_members
+                SET current_reading = ?
+                WHERE member_phone = ? AND group_id = ?
+                """.trimIndent()
+                    ).use { stmt ->
+                        stmt.setDouble(1, reading)
+                        stmt.setString(2, phone)
+                        stmt.setInt(3, groupId)
+                        stmt.executeUpdate()
+                    }
+
+                    // 2. If offset was provided, set it manually
+                    if (offset != null) {
+                        conn.prepareStatement(
+                            """
+                    UPDATE group_members
+                    SET offset_value = ?, offset_origin = 'manual'
+                    WHERE member_phone = ? AND group_id = ?
+                    """.trimIndent()
+                        ).use { stmt ->
+                            stmt.setFloat(1, offset)
+                            stmt.setString(2, phone)
+                            stmt.setInt(3, groupId)
+                            stmt.executeUpdate()
+                        }
+                    }
+
+                    conn.commit()
+                }
+
+                println("✅ Reading submitted: $reading kWh for phone=$phone in group=$groupId (offset=${offset ?: "unchanged"})")
+                call.respond(HttpStatusCode.OK, AuthResponse(true, "Reading submitted"))
+            } catch (e: Exception) {
+                println("❌ Failed to submit reading: ${e.message}")
+                call.respond(HttpStatusCode.InternalServerError, AuthResponse(false, "Failed: ${e.message}"))
             }
-
-            // Parse reading
-            val reading = try {
-                request.reading.toFloat()
-            } catch (e: NumberFormatException) {
-                call.respond(HttpStatusCode.BadRequest,
-                    AuthResponse(false, "Invalid reading format"))
-                return@post
-            }
-
-            // Update member reading
-            updateMemberReading(request.groupId, request.memberPhone, reading)
-
-            call.respond(HttpStatusCode.OK,
-                AuthResponse(true, "Reading submitted successfully"))
         }
 
         get("/getGroupForUser/{phone}") {
@@ -684,7 +820,7 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
 
     // Get all members with their readings and payment status
     val membersQuery = """
-        SELECT u.name, gm.member_phone, gm.current_reading, gm.payment_status
+        SELECT u.name, gm.member_phone, gm.current_reading, gm.payment_status, gm.offset_value, gm.offset_origin
         FROM group_members gm
         JOIN users u ON gm.member_phone = u.phone_number
         WHERE gm.group_id = ?
@@ -709,13 +845,17 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
                     } else {
                         0f
                     }
+                    val offsetValue = rs.getFloat("offset_value")
+                    val offsetOrigin = rs.getString("offset_origin")
 
                     members.add(MemberInfo(
                         name = name,
                         phone = phone,
                         reading = if (reading > 0) reading else null,
                         amountToPay = amountToPay,
-                        paymentStatus = paymentStatus
+                        paymentStatus = paymentStatus,
+                        offsetValue = if (offsetValue > 0) offsetValue else null,
+                        offsetOrigin = offsetOrigin ?: ""
                     ))
 
                     pieChartData[name] = amountToPay
@@ -929,7 +1069,9 @@ private fun insertSplitRecord(
 private fun resetMemberPaymentStatus(groupId: Int, memberPhone: String) {
     val query = """
         UPDATE group_members
-        SET payment_status = 'Pending'
+        SET payment_status = 'Pending',
+            offset_value = NULL,
+            offset_origin = NULL
         WHERE group_id = ? AND member_phone = ?
     """.trimIndent()
 
@@ -941,6 +1083,7 @@ private fun resetMemberPaymentStatus(groupId: Int, memberPhone: String) {
         }
     }
 }
+
 
 private fun deleteSplitRecord(phoneNumber: String, consumerNumber: String) {
     val query = """
@@ -963,6 +1106,41 @@ private fun deleteSplitRecord(phoneNumber: String, consumerNumber: String) {
         }
     }
 }
+
+private fun updateMemberOffset(groupId: Int, memberPhone: String, offsetValue: Float, origin: String) {
+    val query = """
+        UPDATE group_members
+        SET offset_value = ?, offset_origin = ?
+        WHERE group_id = ? AND member_phone = ?
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setFloat(1, offsetValue)
+            stmt.setString(2, origin)
+            stmt.setInt(3, groupId)
+            stmt.setString(4, memberPhone)
+            stmt.executeUpdate()
+        }
+    }
+}
+
+private fun setCurrentReadingAsOffset(groupId: Int, memberPhone: String) {
+    val query = """
+        UPDATE group_members
+        SET offset_value = current_reading, offset_origin = 'Auto'
+        WHERE group_id = ? AND member_phone = ?
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setInt(1, groupId)
+            stmt.setString(2, memberPhone)
+            stmt.executeUpdate()
+        }
+    }
+}
+
 
 
 

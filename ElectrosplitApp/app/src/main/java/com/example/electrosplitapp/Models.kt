@@ -51,9 +51,11 @@ data class JoinGroupRequest(
 data class MemberInfo(
     val name: String,
     val phone: String,
-    val reading: Float?,
+    val reading: Float? = null,
     val amountToPay: Float,
-    val paymentStatus: String
+    val paymentStatus: String,
+    val offsetValue: Float? = null,
+    val offsetOrigin: String = ""
 )
 
 data class GroupDetailsResponse(
@@ -67,8 +69,11 @@ data class GroupDetailsResponse(
     val consumerNumber: String,
     val operator: String,
     val members: List<MemberInfo>,
-    val pieChartData: Map<String, Float>
+    val pieChartData: Map<String, Float>,
+    val offsetValue: Float?, // ✅ new field
+    val offsetOrigin: String? // ✅ new field
 )
+
 
 
 data class UpdateGroupRequest(
@@ -87,11 +92,14 @@ data class DeleteGroupRequest(
     val creatorPhone: String
 )
 
+
 data class SubmitReadingRequest(
     val groupId: Int,
-    val memberPhone: String,
-    val reading: String
+    val phone: String,
+    val reading: String,
+    val offset: String? = null // ✅ Add this
 )
+
 
 
 data class MarkPaidRequest(
