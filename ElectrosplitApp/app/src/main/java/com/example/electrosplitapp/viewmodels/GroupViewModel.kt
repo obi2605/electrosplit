@@ -374,7 +374,21 @@ class GroupViewModel(
                 }
 
                 if (response.isSuccessful) {
-                    fetchGroupDetails(groupId)
+                    val group = response.body()
+                    _groupDetails.value = null
+                    _groupDetails.value = group
+
+                    group?.let {
+                        // ✅ Save updated group state to authManager
+                        authManager.saveGroupDetails(
+                            it.groupId,
+                            it.groupName,
+                            it.groupCode,
+                            it.groupQr,
+                            isGroupCreator.first()
+                        )
+                    }
+
                     onSuccess()
                 } else {
                     _errorMessage.value = "Error: ${response.code()}"
@@ -469,11 +483,15 @@ class GroupViewModel(
         return member?.offsetValue to member?.offsetOrigin
     }
 
-
-
-
-
-
-
+    fun triggerBillUpdate(forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            val group = groupDetails.value ?: return@launch
+            val consumer = group.consumerNumber
+            val operator = group.operator
+            if (consumer.isNotBlank() && operator.isNotBlank()) {
+                updateGroupBill(consumer, operator) {}  // 🔄 This hits /updateGroupBill
+            }
+        }
+    }
 
 }

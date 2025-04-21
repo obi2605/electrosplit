@@ -176,17 +176,19 @@ fun HomeScreen(
                     SwipeRefresh(
                         state = swipeState,
                         onRefresh = {
-                            currentGroupId.toIntOrNull()?.let { groupId ->
-                                groupViewModel.fetchGroupDetails(groupId)
+                            val consumer = groupDetails?.consumerNumber
+                            val operator = groupDetails?.operator
 
-                                val consumer = groupViewModel.groupDetails.value?.consumerNumber
-                                val operator = groupViewModel.groupDetails.value?.operator
-
-                                if (!consumer.isNullOrBlank() && !operator.isNullOrBlank()) {
-                                    billViewModel.fetchBill(consumer, operator)
+                            if (!consumer.isNullOrBlank() && !operator.isNullOrBlank()) {
+                                groupViewModel.updateGroupBill(consumer, operator) {
+                                    currentGroupId.toIntOrNull()?.let { groupId ->
+                                        groupViewModel.fetchGroupDetails(groupId)
+                                        billViewModel.fetchBill(consumer, operator)
+                                    }
                                 }
                             }
                         }
+
                         ,
                         modifier = Modifier.fillMaxSize()
                     ) {
@@ -236,10 +238,11 @@ fun HomeScreen(
                                                 Column {
                                                     Text(member.name, style = MaterialTheme.typography.bodyLarge)
                                                     val adjustedReading = member.reading?.let { r ->
-                                                        when (member.paymentStatus) {
-                                                            "Paid" -> r - (member.previousOffsetValue ?: 0f)
-                                                            else -> r - (member.offsetValue ?: 0f)
+                                                        val offset = when (member.paymentStatus) {
+                                                            "Paid" -> member.previousOffsetValue ?: 0f
+                                                            else -> member.offsetValue ?: 0f
                                                         }
+                                                        (r - offset).coerceAtLeast(0f) // ✅ Clamp to zero
                                                     }
                                                     Text(
                                                         when {

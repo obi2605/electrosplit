@@ -264,23 +264,43 @@ fun Application.configureRouting() {
 
             val request = call.receive<BillRequest>()
 
-            // Verify group exists
+            // ✅ Fetch group BEFORE update
             val group = getGroupById(groupId)
             if (group == null) {
                 call.respond(HttpStatusCode.NotFound, AuthResponse(false, "Group not found"))
                 return@post
             }
 
-            // Verify bill exists
+            // ✅ Save OLD consumer and bill date
+            val oldConsumer = group["bill_consumer_number"] as String
+            val oldOperator = group["bill_operator"] as String
+            val oldBillDate = getLatestBillDate(oldConsumer)
+
+            // ✅ Check if bill exists
             if (!billExists(request.consumerNumber, request.operator)) {
                 call.respond(HttpStatusCode.BadRequest, AuthResponse(false, "Bill not found for provided details"))
                 return@post
             }
 
-            // Update group bill info
+            // ✅ Fetch new bill date before updating anything
+            val newBillDate = getLatestBillDate(request.consumerNumber)
+
+            // ✅ Update the group with new bill
             updateGroupBill(groupId, request.consumerNumber, request.operator)
 
-            call.respond(HttpStatusCode.OK, AuthResponse(true, "Bill updated for group"))
+            // ✅ If changed consumer or newer bill, reset members
+            println("🔥 oldBillDate = $oldBillDate, newBillDate = $newBillDate")
+            println("🔥 newBillDate.after(oldBillDate) = ${newBillDate?.after(oldBillDate)}")
+
+            if (newBillDate != null &&
+                (request.consumerNumber != oldConsumer || request.operator != oldOperator || (oldBillDate != null && newBillDate.after(oldBillDate)))
+            ) {
+                resetGroupMembersForNewBill(groupId)
+            }
+
+            // ✅ Fetch updated group details now
+            val updatedDetails = getGroupDetails(groupId)
+            call.respond(HttpStatusCode.OK, updatedDetails)
         }
 
         post("/markAsPaid") {
@@ -1146,10 +1166,30 @@ private fun setCurrentReadingAsOffset(groupId: Int, memberPhone: String) {
     }
 }
 
+fun resetGroupMembersForNewBill(groupId: Int) {
+    val query = """
+        UPDATE group_members
+        SET current_reading = 0,
+            payment_status = 'Pending'
+        WHERE group_id = ?
+    """.trimIndent()
 
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setInt(1, groupId)
+            stmt.executeUpdate()
+        }
+    }
+}
 
-
-
-
-
-
+private fun getLatestBillDate(consumerNumber: String): java.sql.Timestamp? {
+    val query = "SELECT bill_date FROM bills WHERE consumer_number = ? ORDER BY bill_date DESC LIMIT 1"
+    return createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, consumerNumber)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.getTimestamp("bill_date") else null
+            }
+        }
+    }
+}
