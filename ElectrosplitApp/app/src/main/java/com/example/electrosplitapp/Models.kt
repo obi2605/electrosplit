@@ -118,7 +118,9 @@ data class PaymentHistoryEntry(
     val billGenerationDate: String,
     val datetimePaid: String,
     val groupName: String,
-    val operator: String
+    val operator: String,
+    val unitsPaidFor: Float
+
 )
 
 

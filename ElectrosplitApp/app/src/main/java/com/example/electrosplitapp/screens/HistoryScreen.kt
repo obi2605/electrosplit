@@ -9,9 +9,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.electrosplitapp.PaymentHistoryEntry
+
 import com.example.electrosplitapp.viewmodels.HistoryViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +75,7 @@ fun PaymentHistoryCard(entry: PaymentHistoryEntry) {
             Text("Consumer No: ${entry.consumerNumber}")
             Text("Operator: ${entry.operator}")
             Text("Amount Paid: ₹${"%.2f".format(entry.amount)}")
+            Text("Units Paid For: ${"%.2f".format(entry.unitsPaidFor)} kWh")
             Text("Bill Date: $formattedBillDate")
             Text("Paid On: $formattedPaidDate")
         }

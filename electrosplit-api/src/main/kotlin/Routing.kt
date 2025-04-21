@@ -309,26 +309,45 @@ fun Application.configureRouting() {
             val amount = request.splitAmount
             val consumerNumber = request.consumerNumber
 
+
             try {
                 createDataSource().connection.use { conn ->
                     conn.autoCommit = false
+// ✅ Fetch current reading and current offset before inserting into splits
+                    val (readingg, offset) = conn.prepareStatement(
+                        "SELECT current_reading, offset_value FROM group_members WHERE member_phone = ? AND group_id = ?"
+                    ).use { stmt ->
+                        stmt.setString(1, phone)
+                        stmt.setInt(2, groupId)
+                        stmt.executeQuery().use { rs ->
+                            if (rs.next()) {
+                                rs.getDouble("current_reading") to rs.getFloat("offset_value")
+                            } else throw IllegalStateException("User not found in group")
+                        }
+                    }
 
-                    // ✅ 1. Insert into splits
+// ✅ Calculate adjusted reading
+                    val adjustedReading = (readingg - offset).coerceAtLeast(0.0)
+
+// ✅ Insert into splits with units_paid_for
                     conn.prepareStatement(
                         """
-                INSERT INTO splits (phone_number, split_amount, group_id, consumer_number, datetime_paid, bill_generation_date)
-                VALUES (?, ?, ?, ?, NOW(), 
-                    (SELECT bill_date FROM bills WHERE consumer_number = ? ORDER BY bill_date DESC LIMIT 1)
-                )
-                """.trimIndent()
+    INSERT INTO splits (phone_number, split_amount, group_id, consumer_number, datetime_paid, bill_generation_date, units_paid_for)
+    VALUES (?, ?, ?, ?, NOW(), 
+        (SELECT bill_date FROM bills WHERE consumer_number = ? ORDER BY bill_date DESC LIMIT 1),
+        ?
+    )
+    """.trimIndent()
                     ).use { stmt ->
                         stmt.setString(1, phone)
                         stmt.setDouble(2, amount)
                         stmt.setInt(3, groupId)
                         stmt.setString(4, consumerNumber)
                         stmt.setString(5, consumerNumber)
+                        stmt.setDouble(6, adjustedReading)
                         stmt.executeUpdate()
                     }
+
 
                     // ✅ 2. Update payment status to 'Paid'
                     conn.prepareStatement(
@@ -551,13 +570,14 @@ fun Application.configureRouting() {
 
             try {
                 val query = """
-            SELECT s.split_amount, s.consumer_number, s.bill_generation_date, s.datetime_paid,
-                   g.group_name, g.bill_operator
-            FROM splits s
-            JOIN groups g ON s.group_id = g.group_id
-            WHERE s.phone_number = ?
-            ORDER BY s.bill_generation_date DESC
-        """.trimIndent()
+    SELECT s.split_amount, s.consumer_number, s.bill_generation_date, s.datetime_paid,
+           g.group_name, g.bill_operator, s.units_paid_for
+    FROM splits s
+    JOIN groups g ON s.group_id = g.group_id
+    WHERE s.phone_number = ?
+    ORDER BY s.datetime_paid DESC
+""".trimIndent()
+
 
                 val history = mutableListOf<PaymentHistoryEntry>()
 
@@ -573,7 +593,9 @@ fun Application.configureRouting() {
                                         billGenerationDate = rs.getTimestamp("bill_generation_date").toString(),
                                         datetimePaid = rs.getTimestamp("datetime_paid").toString(),
                                         groupName = rs.getString("group_name"),
-                                        operator = rs.getString("bill_operator")
+                                        operator = rs.getString("bill_operator"),
+                                        unitsPaidFor = rs.getFloat("units_paid_for")
+
                                     )
                                 )
                             }

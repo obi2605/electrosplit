@@ -45,7 +45,9 @@ class HistoryViewModel(
                 }
 
                 if (response.isSuccessful) {
-                    _historyData.value = response.body() ?: emptyList()
+                    _historyData.value = response.body()
+                        ?.sortedByDescending { it.datetimePaid } // ✅ Sort by latest first
+                        ?: emptyList()
                 } else {
                     _errorMessage.value = "Error: ${response.code()}"
                 }
