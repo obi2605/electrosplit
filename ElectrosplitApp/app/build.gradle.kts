@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.runtime.livedata)
 
     // Testing
     testImplementation(libs.junit)
@@ -119,4 +120,25 @@ dependencies {
 
     // Utilities
     implementation(libs.accompanist.permissions)
+
+    // Add these to your dependencies block
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // Add these if not already present
+    implementation(libs.androidx.material3.v132)
+    implementation(libs.androidx.material3.window.size)
+    implementation(libs.androidx.material3.adaptive.navigation.suite)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.logging.interceptor)
+
+    implementation(libs.accompanist.swiperefresh)
+    implementation(libs.barcode.scanning)
+    implementation(libs.core)
+
+
+
 }
