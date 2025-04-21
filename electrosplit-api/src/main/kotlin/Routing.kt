@@ -571,7 +571,9 @@ fun Application.configureRouting() {
             try {
                 val query = """
     SELECT s.split_amount, s.consumer_number, s.bill_generation_date, s.datetime_paid,
-           g.group_name, g.bill_operator, s.units_paid_for
+           g.group_name, g.bill_operator, s.units_paid_for,
+           TO_CHAR(s.datetime_paid, 'Month YYYY') AS month_label,
+       TO_CHAR(s.datetime_paid, 'YYYY-MM') AS month_key
     FROM splits s
     JOIN groups g ON s.group_id = g.group_id
     WHERE s.phone_number = ?
@@ -594,7 +596,9 @@ fun Application.configureRouting() {
                                         datetimePaid = rs.getTimestamp("datetime_paid").toString(),
                                         groupName = rs.getString("group_name"),
                                         operator = rs.getString("bill_operator"),
-                                        unitsPaidFor = rs.getFloat("units_paid_for")
+                                        unitsPaidFor = rs.getFloat("units_paid_for"),
+                                        monthLabel = rs.getString("month_label"),
+                                        monthKey = rs.getString("month_key")
 
                                     )
                                 )
