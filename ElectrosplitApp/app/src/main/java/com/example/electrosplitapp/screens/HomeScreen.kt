@@ -181,10 +181,7 @@ fun HomeScreen(
 
                             if (!consumer.isNullOrBlank() && !operator.isNullOrBlank()) {
                                 groupViewModel.updateGroupBill(consumer, operator) {
-                                    currentGroupId.toIntOrNull()?.let { groupId ->
-                                        groupViewModel.fetchGroupDetails(groupId)
-                                        billViewModel.fetchBill(consumer, operator)
-                                    }
+                                    billViewModel.fetchBill(consumer, operator)
                                 }
                             }
                         }

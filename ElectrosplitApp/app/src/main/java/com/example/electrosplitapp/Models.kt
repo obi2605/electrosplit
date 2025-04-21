@@ -72,7 +72,9 @@ data class GroupDetailsResponse(
     val members: List<MemberInfo>,
     val pieChartData: Map<String, Float>,
     val offsetValue: Float?, // ✅ new field
-    val offsetOrigin: String? // ✅ new field
+    val offsetOrigin: String?,
+    val billId: Int? = null // ✅ NEW FIELD
+
 )
 
 

@@ -79,7 +79,8 @@ data class GroupDetailsResponse(
     val consumerNumber: String,
     val operator: String,
     val members: List<MemberInfo>,
-    val pieChartData: Map<String, Float>
+    val pieChartData: Map<String, Float>,
+    val billId: Int? = null // ✅ NEW FIELD
 )
 
 

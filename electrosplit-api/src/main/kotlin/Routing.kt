@@ -255,6 +255,7 @@ fun Application.configureRouting() {
                 AuthResponse(true, "Group deleted successfully"))
         }
 
+// 🔁 Inside /updateGroupBill/{groupId}
         post("/updateGroupBill/{groupId}") {
             val groupId = call.parameters["groupId"]?.toIntOrNull()
             if (groupId == null) {
@@ -271,10 +272,11 @@ fun Application.configureRouting() {
                 return@post
             }
 
-            // ✅ Save OLD consumer and bill date
             val oldConsumer = group["bill_consumer_number"] as String
             val oldOperator = group["bill_operator"] as String
-            val oldBillDate = getLatestBillDate(oldConsumer)
+            val oldBillId = group["bill_id"] as? Int
+
+            val oldBillDate = oldBillId?.let { getBillDateById(it) }
 
             // ✅ Check if bill exists
             if (!billExists(request.consumerNumber, request.operator)) {
@@ -282,23 +284,20 @@ fun Application.configureRouting() {
                 return@post
             }
 
-            // ✅ Fetch new bill date before updating anything
-            val newBillDate = getLatestBillDate(request.consumerNumber)
+            val newBillId = getLatestBillId(request.consumerNumber, request.operator)
+            val newBillDate = getBillDateById(newBillId)
 
-            // ✅ Update the group with new bill
-            updateGroupBill(groupId, request.consumerNumber, request.operator)
+            // ✅ Update group bill + bill_id
+            updateGroupBillWithId(groupId, request.consumerNumber, request.operator, newBillId)
 
-            // ✅ If changed consumer or newer bill, reset members
-            println("🔥 oldBillDate = $oldBillDate, newBillDate = $newBillDate")
-            println("🔥 newBillDate.after(oldBillDate) = ${newBillDate?.after(oldBillDate)}")
-
-            if (newBillDate != null &&
-                (request.consumerNumber != oldConsumer || request.operator != oldOperator || (oldBillDate != null && newBillDate.after(oldBillDate)))
-            ) {
+            // ✅ Conditional reset
+            if (newBillDate != null && (
+                        request.consumerNumber != oldConsumer || request.operator != oldOperator ||
+                                (oldBillDate != null && newBillDate.after(oldBillDate))
+                        )) {
                 resetGroupMembersForNewBill(groupId)
             }
 
-            // ✅ Fetch updated group details now
             val updatedDetails = getGroupDetails(groupId)
             call.respond(HttpStatusCode.OK, updatedDetails)
         }
@@ -769,7 +768,8 @@ private fun getGroupById(groupId: Int): Map<String, Any>? {
                         "group_code" to rs.getString("group_code"),
                         "group_qr" to rs.getString("group_qr"),
                         "bill_consumer_number" to rs.getString("bill_consumer_number"),
-                        "bill_operator" to rs.getString("bill_operator")
+                        "bill_operator" to rs.getString("bill_operator"),
+                        "bill_id" to rs.getInt("bill_id") // ✅ now fetched too
                     )
                 } else {
                     null
@@ -778,6 +778,7 @@ private fun getGroupById(groupId: Int): Map<String, Any>? {
         }
     }
 }
+
 
 private fun addGroupMember(groupId: Int, memberPhone: String) {
     val query = """
@@ -825,28 +826,23 @@ private fun groupExists(groupId: Int): Boolean {
 }
 
 private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
-    // Get group info - we know it exists because we just checked
     val group = getGroupById(groupId)!!
 
-    // Get bill details - this should exist because we checked during group creation
     val bill = fetchBillFromDB(
         group["bill_consumer_number"] as String,
         group["bill_operator"] as String
     )!!
 
-    // Get creator name - we know creator exists because we checked during group creation
     val creator = getUserByPhone(group["creator_phone"] as String)!!
     val creatorName = creator["name"] as String
 
-    // Get all members with their readings and payment status
     val membersQuery = """
-    SELECT u.name, gm.member_phone, gm.current_reading, gm.payment_status,
-           gm.offset_value, gm.offset_origin, gm.previous_offset_value
-    FROM group_members gm
-    JOIN users u ON gm.member_phone = u.phone_number
-    WHERE gm.group_id = ?
-""".trimIndent()
-
+        SELECT u.name, gm.member_phone, gm.current_reading, gm.payment_status,
+               gm.offset_value, gm.offset_origin, gm.previous_offset_value
+        FROM group_members gm
+        JOIN users u ON gm.member_phone = u.phone_number
+        WHERE gm.group_id = ?
+    """.trimIndent()
 
     val members = mutableListOf<MemberInfo>()
     val pieChartData = mutableMapOf<String, Float>()
@@ -862,13 +858,10 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
                     val paymentStatus = rs.getString("payment_status")
                     val previousOffsetValue = rs.getFloat("previous_offset_value")
 
-
-                    // Calculate amount to pay (simplified for now)
                     val amountToPay = if (reading > 0) {
                         bill.totalAmount.toFloat() / countGroupMembers(groupId)
-                    } else {
-                        0f
-                    }
+                    } else 0f
+
                     val offsetValue = rs.getFloat("offset_value")
                     val offsetOrigin = rs.getString("offset_origin")
 
@@ -903,6 +896,7 @@ private fun getGroupDetails(groupId: Int): GroupDetailsResponse {
         pieChartData = pieChartData
     )
 }
+
 
 private fun countGroupMembers(groupId: Int): Int {
     val query = "SELECT COUNT(*) FROM group_members WHERE group_id = ?"
@@ -1193,3 +1187,47 @@ private fun getLatestBillDate(consumerNumber: String): java.sql.Timestamp? {
         }
     }
 }
+
+private fun getLatestBillId(consumerNumber: String, operator: String): Int {
+    val query = "SELECT id FROM bills WHERE consumer_number = ? AND operator = ? ORDER BY bill_date DESC LIMIT 1"
+    return createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, consumerNumber)
+            stmt.setString(2, operator)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.getInt("id") else throw IllegalStateException("No bill found")
+            }
+        }
+    }
+}
+
+private fun getBillDateById(billId: Int): java.sql.Timestamp? {
+    val query = "SELECT bill_date FROM bills WHERE id = ?"
+    return createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setInt(1, billId)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.getTimestamp("bill_date") else null
+            }
+        }
+    }
+}
+
+private fun updateGroupBillWithId(groupId: Int, consumerNumber: String, operator: String, billId: Int) {
+    val query = """
+        UPDATE groups 
+        SET bill_consumer_number = ?, bill_operator = ?, bill_id = ?
+        WHERE group_id = ?
+    """.trimIndent()
+
+    createDataSource().connection.use { conn ->
+        conn.prepareStatement(query).use { stmt ->
+            stmt.setString(1, consumerNumber)
+            stmt.setString(2, operator)
+            stmt.setInt(3, billId)
+            stmt.setInt(4, groupId)
+            stmt.executeUpdate()
+        }
+    }
+}
+
