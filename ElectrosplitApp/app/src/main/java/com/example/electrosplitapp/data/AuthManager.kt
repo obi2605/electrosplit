@@ -130,4 +130,9 @@ class AuthManager(private val context: Context) {
             )
         }.first()
     }
+
+    suspend fun getPhoneNumber(): String? {
+        return context.dataStore.data.map { it[PHONE_NUMBER] }.first()
+    }
+
 }

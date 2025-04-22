@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.runtime.livedata)
+    implementation(libs.play.services.location)
 
     // Testing
     testImplementation(libs.junit)
@@ -138,6 +139,8 @@ dependencies {
     implementation(libs.accompanist.swiperefresh)
     implementation(libs.barcode.scanning)
     implementation(libs.core)
+    implementation(libs.mpandroidchart)
+
 
 
 

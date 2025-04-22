@@ -20,6 +20,7 @@ import com.example.electrosplitapp.screens.*
 import com.example.electrosplitapp.viewmodels.BillViewModel
 import com.example.electrosplitapp.viewmodels.GroupViewModel
 import com.example.electrosplitapp.viewmodels.HistoryViewModel
+import kotlinx.coroutines.runBlocking
 
 @Composable
 fun AppNavigation(
@@ -138,9 +139,10 @@ fun AppNavigation(
 
 
             composable(Screen.Prediction.route) {
-                PredictionScreen()
-            }
+                val phone = runBlocking { authManager.getPhoneNumber() ?: "" }
+                PredictionScreen(phone = phone)
 
+            }
             composable(Screen.Payment.route) {
                 PaymentScreen(
                     onBack = { navController.popBackStack() }
