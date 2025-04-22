@@ -1,8 +1,8 @@
 package com.example.electrosplitapp.components
 
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.github.mikephil.charting.charts.LineChart
@@ -12,73 +12,91 @@ import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun LineChartView(
-    values: List<Double>,
-    labels: List<String>,
+    historyData: List<Pair<Date, Double>>,
+    predictedPoint: Pair<Date, Double>,
+    isIncrease: Boolean,
     modifier: Modifier = Modifier
 ) {
-    AndroidView(
-        factory = { context ->
-            LineChart(context).apply {
-                val entries = values.mapIndexed { index, value ->
-                    Entry(index.toFloat(), value.toFloat())
-                }
+    key(historyData, predictedPoint, isIncrease) {   // 🟢 Trigger refresh on changes
+        AndroidView(
+            factory = { context ->
+                LineChart(context).apply {
+                    val monthFormat = SimpleDateFormat("MMM", Locale.getDefault())
+                    val allDates = historyData.map { it.first.time } + predictedPoint.first.time
+                    val minTime = allDates.minOrNull() ?: 0L
 
-                val dataSet = LineDataSet(entries, "Predicted Bill Share").apply {
-                    color = Color.rgb(33, 150, 243)
-                    valueTextColor = Color.DKGRAY
-                    circleRadius = 6f
-                    setCircleColor(Color.rgb(233, 30, 99))
-                    lineWidth = 3f
-                    mode = LineDataSet.Mode.CUBIC_BEZIER
-                    valueTextSize = 12f
-                    setDrawValues(true)
-                    setDrawFilled(true)
-                    fillDrawable = GradientDrawable().apply {
-                        shape = GradientDrawable.RECTANGLE
-                        orientation = GradientDrawable.Orientation.TOP_BOTTOM
-                        colors = intArrayOf(
-                            Color.argb(120, 33, 150, 243),
-                            Color.TRANSPARENT
-                        )
+                    val historyEntries = historyData.map {
+                        Entry((it.first.time - minTime).toFloat(), it.second.toFloat())
                     }
-                }
+                    val predictionEntry = Entry(
+                        (predictedPoint.first.time - minTime).toFloat(),
+                        predictedPoint.second.toFloat()
+                    )
 
-                data = LineData(dataSet)
+                    val historySet = LineDataSet(historyEntries, "History").apply {
+                        color = Color.MAGENTA
+                        setCircleColor(Color.MAGENTA)
+                        lineWidth = 2f
+                        circleRadius = 5f
+                        setDrawValues(false)
+                    }
 
-                xAxis.apply {
-                    position = XAxis.XAxisPosition.BOTTOM
-                    granularity = 1f
-                    setDrawGridLines(false)
-                    textColor = Color.YELLOW
-                    textSize = 12f
-                    valueFormatter = object : ValueFormatter() {
-                        override fun getFormattedValue(value: Float): String {
-                            return labels.getOrNull(value.toInt()) ?: value.toInt().toString()
+                    val lastHistoryEntry = historyEntries.maxByOrNull { it.x }
+
+                    val predictionSet = LineDataSet(
+                        listOfNotNull(lastHistoryEntry, predictionEntry),
+                        "Prediction"
+                    ).apply {
+                        color = if (isIncrease) Color.RED else Color.GREEN
+                        setCircleColor(color)
+                        lineWidth = 2f
+                        circleRadius = 7f
+                        setDrawValues(false)
+                    }
+
+                    data = LineData(historySet, predictionSet)
+
+                    val calendarStart = Calendar.getInstance().apply { timeInMillis = minTime }
+                    val calendarEnd = Calendar.getInstance().apply { time = predictedPoint.first }
+
+                    val monthDiff = (calendarEnd.get(Calendar.YEAR) - calendarStart.get(Calendar.YEAR)) * 12 +
+                            (calendarEnd.get(Calendar.MONTH) - calendarStart.get(Calendar.MONTH)) + 1
+
+                    val labelCount = monthDiff.coerceAtLeast(2)  // Ensure at least 2 labels
+
+
+                    xAxis.apply {
+                        position = XAxis.XAxisPosition.BOTTOM
+                        granularity = 1f
+                        textColor = Color.WHITE
+                        setAvoidFirstLastClipping(true)
+                        setLabelCount(labelCount, true)   // Dynamically set label count based on months
+
+                        valueFormatter = object : ValueFormatter() {
+                            override fun getFormattedValue(value: Float): String {
+                                val date = Date(minTime + value.toLong())
+                                return monthFormat.format(date)
+                            }
                         }
                     }
-                }
 
-                axisRight.isEnabled = false
-                axisLeft.apply {
-                    setDrawGridLines(true)
-                    textColor = Color.YELLOW
-                    textSize = 12f
-                    valueFormatter = object : ValueFormatter() {
-                        override fun getFormattedValue(value: Float): String {
-                            return "%.0f kWh".format(value)
-                        }
-                    }
-                }
+                    axisRight.isEnabled = false
+                    axisLeft.textColor = Color.WHITE
 
-                setExtraOffsets(16f, 16f, 16f, 16f)
-                description = Description().apply { text = "" }
-                legend.isEnabled = false
-                animateX(1000)
-            }
-        },
-        modifier = modifier
-    )
+                    description = Description().apply { text = "" }
+                    legend.isEnabled = true
+                    setTouchEnabled(true)
+                    setPinchZoom(true)
+                    animateX(1000)
+                }
+            },
+            modifier = modifier
+        )
+    }
 }
+
