@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 fun PieChart(
     data: Map<String, Float>,
     modifier: Modifier = Modifier
-) {
+) { key(data) {
     val colors = listOf(
         Color(0xFFEF5350),
         Color(0xFFAB47BC),
@@ -45,12 +45,15 @@ fun PieChart(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        Canvas(modifier = Modifier
-            .fillMaxWidth()
-            .height(220.dp)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+        ) {
             val diameter = size.minDimension
             val radius = diameter / 2f
-            val rect = Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius)
+            val rect =
+                Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius)
             val entries = data.entries.toList()
 
             entries.forEachIndexed { index, entry ->
@@ -84,9 +87,13 @@ fun PieChart(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(entry.key, style = MaterialTheme.typography.bodyMedium)
                     }
-                    Text("₹${"%.2f".format(entry.value)}", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "₹${"%.2f".format(entry.value)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }
     }
+  }
 }

@@ -1,9 +1,11 @@
 package com.example.electrosplitapp.components
 
 import android.graphics.Color
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.Description
@@ -23,6 +25,7 @@ fun LineChartView(
     modifier: Modifier = Modifier
 ) {
     key(historyData, predictedPoint, isIncrease) {   // 🟢 Trigger refresh on changes
+        val legendTextColor = MaterialTheme.colorScheme.onBackground.toArgb()
         AndroidView(
             factory = { context ->
                 LineChart(context).apply {
@@ -90,6 +93,9 @@ fun LineChartView(
 
                     description = Description().apply { text = "" }
                     legend.isEnabled = true
+                    legend.textColor = legendTextColor
+                    legend.textSize = 10f
+                    legend.yOffset = 16f   // Add spacing from chart
                     setTouchEnabled(true)
                     setPinchZoom(true)
                     animateX(1000)

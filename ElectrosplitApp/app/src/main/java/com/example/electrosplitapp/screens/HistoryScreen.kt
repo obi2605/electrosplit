@@ -127,12 +127,14 @@ fun FilterDropdown(
     onExpandChange: (Boolean) -> Unit,
     onSelect: (String?) -> Unit
 ) {
+    val displayOptions = listOf("None") + options  // Add "None" option
+
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = onExpandChange
     ) {
         OutlinedTextField(
-            value = selected ?: "",
+            value = selected ?: "None",
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -146,15 +148,18 @@ fun FilterDropdown(
             expanded = expanded,
             onDismissRequest = { onExpandChange(false) }
         ) {
-            options.forEach { option ->
+            displayOptions.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option) },
-                    onClick = { onSelect(option) }
+                    onClick = {
+                        onSelect(if (option == "None") null else option)
+                    }
                 )
             }
         }
     }
 }
+
 
 
 @Composable

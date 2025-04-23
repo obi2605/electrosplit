@@ -85,10 +85,7 @@ fun HomeScreen(
     val isGroupCreator by groupViewModel.isGroupCreator.collectAsState(initial = false)
     val groupLoading by groupViewModel.isLoading.collectAsState(initial = false)
     val groupRestored by groupViewModel.groupRestored.collectAsState(initial = false)
-    val currentUserPhone = groupViewModel.phoneNumber.collectAsState(initial = "").value
-    val isCurrentUserPaid = groupDetails?.members
-        ?.firstOrNull { it.phone == currentUserPhone }
-        ?.paymentStatus == "Paid"
+    val isAnyMemberPaid = groupDetails?.members?.any { it.paymentStatus == "Paid" } == true
 
 
     val adjustedReadings = groupDetails?.members?.mapNotNull { member ->
@@ -226,9 +223,13 @@ fun HomeScreen(
                             }
 
                             groupDetails?.members?.let { members ->
-                                itemsIndexed(members) { _, member ->
+                                itemsIndexed(
+                                    items = members,
+                                    key = { _, member -> member.phone + (calculatedBills?.get(member.name)?.amountToPay ?: "") }
+                                ) { _, member ->
                                     val memberBill = calculatedBills?.get(member.name)
-                                    val isCurrentUser = groupViewModel.phoneNumber.collectAsState(initial = "").value == member.phone
+                                    val isCurrentUser =
+                                        groupViewModel.phoneNumber.collectAsState(initial = "").value == member.phone
 
                                     Card(modifier = Modifier.fillMaxWidth()) {
                                         Column(modifier = Modifier.padding(16.dp)) {
@@ -238,10 +239,15 @@ fun HomeScreen(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Column {
-                                                    Text(member.name, style = MaterialTheme.typography.bodyLarge)
+                                                    Text(
+                                                        member.name,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
                                                     val adjustedReading = member.reading?.let { r ->
                                                         val offset = when (member.paymentStatus) {
-                                                            "Paid" -> member.previousOffsetValue ?: 0f
+                                                            "Paid" -> member.previousOffsetValue
+                                                                ?: 0f
+
                                                             else -> member.offsetValue ?: 0f
                                                         }
                                                         (r - offset).coerceAtLeast(0f) // ✅ Clamp to zero
@@ -249,10 +255,13 @@ fun HomeScreen(
                                                     Text(
                                                         when {
                                                             member.reading == null -> "No reading submitted"
-                                                            else -> "Reading: ${"%.2f".format(adjustedReading ?: 0f)} kWh"
+                                                            else -> "Reading: ${
+                                                                "%.2f".format(
+                                                                    adjustedReading ?: 0f
+                                                                )
+                                                            } kWh"
                                                         }
                                                     )
-
 
 
                                                 }
@@ -294,12 +303,15 @@ fun HomeScreen(
                                                                 groupDetails?.let { gd ->
                                                                     groupViewModel.markAsPaid(
                                                                         groupId = gd.groupId,
-                                                                        amountPaid = memberBill?.amountToPay ?: member.amountToPay
+                                                                        amountPaid = memberBill?.amountToPay
+                                                                            ?: member.amountToPay
                                                                     )
 
                                                                     // Add small delay before fetching history
                                                                     CoroutineScope(Dispatchers.Main).launch {
-                                                                        kotlinx.coroutines.delay(1000)
+                                                                        kotlinx.coroutines.delay(
+                                                                            1000
+                                                                        )
                                                                         historyViewModel.fetchPaymentHistory()
                                                                     }
                                                                 }
@@ -313,28 +325,45 @@ fun HomeScreen(
                                                         Button(
                                                             onClick = {
                                                                 groupDetails?.let { gd ->
-                                                                    val currentReading = member.reading ?: 0f
-                                                                    val currentOffset = member.offsetValue ?: 0f
-                                                                    val restoredOffset = (currentReading - currentOffset).coerceAtLeast(0f)
+                                                                    val currentReading =
+                                                                        member.reading ?: 0f
+                                                                    val currentOffset =
+                                                                        member.offsetValue ?: 0f
+                                                                    val restoredOffset =
+                                                                        (currentReading - currentOffset).coerceAtLeast(
+                                                                            0f
+                                                                        )
 
-                                                                    groupViewModel.submitReading(currentReading.toString(), restoredOffset.toString()) {
+                                                                    groupViewModel.submitReading(
+                                                                        currentReading.toString(),
+                                                                        restoredOffset.toString()
+                                                                    ) {
                                                                         groupViewModel.resetPaymentStatus(
                                                                             groupId = gd.groupId,
-                                                                            amountPaid = (memberBill?.amountToPay ?: member.amountToPay).toDouble()
+                                                                            amountPaid = (memberBill?.amountToPay
+                                                                                ?: member.amountToPay).toDouble()
                                                                         )
                                                                         CoroutineScope(Dispatchers.Main).launch {
-                                                                            kotlinx.coroutines.delay(1000)
+                                                                            kotlinx.coroutines.delay(
+                                                                                1000
+                                                                            )
                                                                             historyViewModel.fetchPaymentHistory()
                                                                         }
                                                                     }
 
                                                                     CoroutineScope(Dispatchers.Main).launch {
-                                                                        kotlinx.coroutines.delay(1000)
+                                                                        kotlinx.coroutines.delay(
+                                                                            1000
+                                                                        )
                                                                         historyViewModel.fetchPaymentHistory()
                                                                     }
                                                                 }
                                                             },
-                                                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.1f))
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = Color.Red.copy(
+                                                                    alpha = 0.1f
+                                                                )
+                                                            )
                                                         ) {
                                                             Text("Reset", color = Color.Red)
                                                         }
@@ -345,9 +374,10 @@ fun HomeScreen(
                                         }
                                     }
                                 }
+
                             }
 
-                            item {
+                            item(key = calculatedBills?.hashCode() ?: groupDetails?.pieChartData?.hashCode()) {
                                 calculatedBills?.takeIf { it.isNotEmpty() }?.let { data ->
                                     PieChart(data = data.mapValues { it.value.amountToPay })
                                 } ?: groupDetails?.pieChartData?.takeIf { it.isNotEmpty() }?.let { data ->
@@ -357,13 +387,23 @@ fun HomeScreen(
 
                             item {
                                 Column {
+
+                                    if (isAnyMemberPaid) {
+                                        Text(
+                                            text = "Reading cannot be changed: 1 or more users have paid already",
+                                            color = Color.Red,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                    }
+                                    
                                     FilledTonalButton(
                                         onClick = { showCamera = true },
                                         modifier = Modifier.fillMaxWidth(),
-                                        enabled = !isCurrentUserPaid,
+                                        enabled = !isAnyMemberPaid,
                                         colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = if (isCurrentUserPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
-                                            contentColor = if (isCurrentUserPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
+                                            containerColor = if (isAnyMemberPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = if (isAnyMemberPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     ) {
                                         Icon(Icons.Filled.CameraAlt, contentDescription = null)
@@ -376,10 +416,10 @@ fun HomeScreen(
                                     FilledTonalButton(
                                         onClick = { galleryLauncher.launch("image/*") },
                                         modifier = Modifier.fillMaxWidth(),
-                                        enabled = !isCurrentUserPaid,
+                                        enabled = !isAnyMemberPaid,
                                         colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = if (isCurrentUserPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
-                                            contentColor = if (isCurrentUserPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
+                                            containerColor = if (isAnyMemberPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = if (isAnyMemberPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     ) {
                                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
@@ -392,16 +432,17 @@ fun HomeScreen(
                                     FilledTonalButton(
                                         onClick = { showManualDialog = true },
                                         modifier = Modifier.fillMaxWidth(),
-                                        enabled = !isCurrentUserPaid,
+                                        enabled = !isAnyMemberPaid,
                                         colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = if (isCurrentUserPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
-                                            contentColor = if (isCurrentUserPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
+                                            containerColor = if (isAnyMemberPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = if (isAnyMemberPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     ) {
                                         Icon(Icons.Filled.Keyboard, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
                                         Text("Enter Manually")
                                     }
+
                                 }
                             }
                         }
