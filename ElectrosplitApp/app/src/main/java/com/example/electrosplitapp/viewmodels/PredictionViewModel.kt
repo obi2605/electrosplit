@@ -40,6 +40,11 @@ class PredictionViewModel : ViewModel() {
     private val _error = MutableLiveData<String?>()
     val error: LiveData<String?> = _error
 
+    private val _historyData = MutableLiveData<List<PaymentHistoryEntry>>(emptyList())
+    val historyData: LiveData<List<PaymentHistoryEntry>> = _historyData
+
+
+
     fun fetchPredictionWithHistory(phone: String, city: String, billingCycle: Int) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -47,8 +52,10 @@ class PredictionViewModel : ViewModel() {
                 if (historyResponse.isSuccessful) {
                     val historyList = historyResponse.body()
                     if (!historyList.isNullOrEmpty()) {
+                        _historyData.postValue(historyList ?: emptyList())   // ⭐ Store full history
                         val latest = historyList.maxByOrNull { it.datetimePaid }
                         _latestPayment.postValue(latest)
+
 
                         val lastPaidDate = latest?.billGenerationDate ?: return@launch
                         val request = PredictionRequest(
@@ -61,6 +68,7 @@ class PredictionViewModel : ViewModel() {
                         val predictionResponse = predictionService.getPrediction(request).execute()
                         if (predictionResponse.isSuccessful) {
                             _prediction.postValue(predictionResponse.body())
+
                         } else {
                             _error.postValue("Prediction error: ${predictionResponse.code()}")
                         }

@@ -19,6 +19,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -30,6 +31,7 @@ import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,6 +46,7 @@ fun PredictionScreen(
 
     val prediction by predictionViewModel.prediction.observeAsState()
     val latestPayment by predictionViewModel.latestPayment.observeAsState()
+    val historyList by predictionViewModel.historyData.observeAsState(emptyList())
     val error by predictionViewModel.error.observeAsState()
 
     var city by remember { mutableStateOf<String?>(null) }
@@ -156,6 +159,7 @@ fun PredictionScreen(
                     val predictedUnits = prediction!!.predictedUnits
                     val lastUnits = latestPayment!!.unitsPaidFor
                     val delta = predictedUnits - lastUnits
+                    val isIncrease = delta > 0
 
                     val totalAmount = BillCalculator.calculateSplit(
                         totalBillAmount = 0f,
@@ -164,19 +168,19 @@ fun PredictionScreen(
                         groupSize = 1
                     ).individualBills.first().amountToPay
 
-                    val changeText = when {
-                        kotlin.math.abs(delta) < 1 -> "Roughly same as last time"
-                        delta > 0 -> "Increase of %.2f units".format(delta)
-                        else -> "Decrease of %.2f units".format(-delta)
-                    }
+                    val deltaText = if (delta >= 0)
+                        "+%.2f units".format(delta)
+                    else
+                        "%.2f units".format(delta)
 
+                    val deltaColor = if (delta >= 0) Color.Red else Color.Green
                     val seasonalHint = getSeasonalHint(prediction!!.targetMonth)
 
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Last Paid: ${"%.2f".format(lastUnits)} units")
                             Text("Predicted: ${"%.2f".format(predictedUnits)} units")
-                            Text(changeText)
+                            Text(deltaText, color = deltaColor)
                             Text("Estimated Amount: ₹${"%.2f".format(totalAmount)}")
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(seasonalHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -185,16 +189,28 @@ fun PredictionScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // 🔹 Chart Refresh
-                    key(selectedCycle, prediction) {
-                        LineChartView(
-                            values = listOf(lastUnits.toDouble(), predictedUnits),
-                            labels = listOf("Last", "Predicted"),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(300.dp)
-                        )
+                    // Prepare chart data
+                    val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    val historyPoints = historyList.mapNotNull {
+                        try {
+                            val date = dateFormat.parse(it.datetimePaid.substring(0, 19))
+                            date?.let { d -> d to it.unitsPaidFor.toDouble() }   // Ensures type matches LineChartView
+                        } catch (e: Exception) { null }
                     }
+
+                    val predictedDate = Calendar.getInstance().apply {
+                        time = dateFormat.parse(latestPayment!!.datetimePaid.substring(0, 19))!!
+                        add(Calendar.MONTH, selectedCycle)
+                    }.time
+
+                    LineChartView(
+                        historyData = historyPoints,
+                        predictedPoint = predictedDate to predictedUnits,
+                        isIncrease = isIncrease,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                    )
                 }
                 else -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -250,7 +266,6 @@ fun fetchCityFromLocation(
     }
 }
 
-// 🌐 Helper function to normalize locality to known city names
 fun normalizeCity(rawCity: String?): String? {
     return when {
         rawCity.isNullOrBlank() -> null
@@ -258,10 +273,9 @@ fun normalizeCity(rawCity: String?): String? {
         rawCity.contains("Tambaram", ignoreCase = true) -> "Chennai"
         rawCity.contains("Noida", ignoreCase = true) -> "Delhi"
         rawCity.contains("Thane", ignoreCase = true) -> "Mumbai"
-        else -> rawCity  // Default: Use as-is
+        else -> rawCity
     }
 }
-
 
 fun getSeasonalHint(month: Int): String {
     return when (month) {
