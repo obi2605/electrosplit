@@ -85,6 +85,11 @@ fun HomeScreen(
     val isGroupCreator by groupViewModel.isGroupCreator.collectAsState(initial = false)
     val groupLoading by groupViewModel.isLoading.collectAsState(initial = false)
     val groupRestored by groupViewModel.groupRestored.collectAsState(initial = false)
+    val currentUserPhone = groupViewModel.phoneNumber.collectAsState(initial = "").value
+    val isCurrentUserPaid = groupDetails?.members
+        ?.firstOrNull { it.phone == currentUserPhone }
+        ?.paymentStatus == "Paid"
+
 
     val adjustedReadings = groupDetails?.members?.mapNotNull { member ->
         val reading = member.reading ?: return@mapNotNull null
@@ -352,7 +357,15 @@ fun HomeScreen(
 
                             item {
                                 Column {
-                                    FilledTonalButton(onClick = { showCamera = true }, modifier = Modifier.fillMaxWidth()) {
+                                    FilledTonalButton(
+                                        onClick = { showCamera = true },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        enabled = !isCurrentUserPaid,
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (isCurrentUserPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = if (isCurrentUserPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    ) {
                                         Icon(Icons.Filled.CameraAlt, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
                                         Text("Scan Meter")
@@ -360,7 +373,15 @@ fun HomeScreen(
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    FilledTonalButton(onClick = { galleryLauncher.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+                                    FilledTonalButton(
+                                        onClick = { galleryLauncher.launch("image/*") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        enabled = !isCurrentUserPaid,
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (isCurrentUserPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = if (isCurrentUserPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    ) {
                                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
                                         Text("From Gallery")
@@ -368,7 +389,15 @@ fun HomeScreen(
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    FilledTonalButton(onClick = { showManualDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                                    FilledTonalButton(
+                                        onClick = { showManualDialog = true },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        enabled = !isCurrentUserPaid,
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = if (isCurrentUserPaid) Color.LightGray else MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = if (isCurrentUserPaid) Color.DarkGray else MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    ) {
                                         Icon(Icons.Filled.Keyboard, contentDescription = null)
                                         Spacer(Modifier.width(8.dp))
                                         Text("Enter Manually")

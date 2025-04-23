@@ -1,4 +1,6 @@
 package com.example.electrosplitapp
+import com.google.gson.annotations.SerializedName
+
 
 data class BillRequest(
     val consumerNumber: String,
@@ -124,6 +126,22 @@ data class PaymentHistoryEntry(
     val monthKey: String? = null
 
 )
+
+
+data class PredictionRequest(
+    val city: String,
+    @SerializedName("last_paid_units") val lastPaidUnits: Int,
+    @SerializedName("last_paid_date") val lastPaidDate: String,
+    @SerializedName("billing_cycle") val billingCycle: Int
+)
+
+data class PredictionResponse(
+    val delta: Double,
+    @SerializedName("predicted_units") val predictedUnits: Double,
+    @SerializedName("target_month") val targetMonth: Int
+)
+
+
 
 
 typealias ResetPaymentRequest = MarkPaidRequest
